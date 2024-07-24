@@ -153,12 +153,22 @@ void Certificate::calculate_dependencies() {
 // Basic printing functions //
 //////////////////////////////
 
+// Space for the 64-bit decimal digits
+constexpr size_t BUFFER_LONG_STRING_SIZE = 32;
+
 inline void write_output(const char *message) {
 	cout << message;
 }
 
 inline void print_bool(bool variable) {
 	write_output(variable ? "true" : "false");
+}
+
+inline void print_unsigned_long(unsigned long variable) {
+	static char buffer[BUFFER_LONG_STRING_SIZE];
+
+	snprintf(buffer, BUFFER_LONG_STRING_SIZE, "%lu", variable);
+	write_output(buffer);
 }
 
 inline void print_integral_string(char *number) {
@@ -189,6 +199,14 @@ inline void print_number(Number &number) {
 // Generate functions //
 ////////////////////////
 
+inline void generate(bool variable) {
+	print_bool(variable);
+}
+
+inline void generate(unsigned long variable) {
+	print_unsigned_long(variable);
+}
+
 template<typename F>
 inline void generate(F &&function) {
 	function();
@@ -201,13 +219,7 @@ inline void generate(bool &variable) {
 
 template<>
 inline void generate(unsigned long &variable) {
-	// Space for the 64-bit decimal digits
-	constexpr size_t BUFFER_LONG_STRING_SIZE = 32;
-
-	static char buffer[BUFFER_LONG_STRING_SIZE];
-
-	snprintf(buffer, BUFFER_LONG_STRING_SIZE, "%lu", variable);
-	write_output(buffer);
+	print_unsigned_long(variable);
 }
 
 template<>
@@ -802,19 +814,19 @@ void Certificate::print_DIS(Constraint &c_i, Constraint &c_j) {
 			// Not counting because the number of operations is always >= 2
 
 			for(unsigned long k = 0; k < number_variables; k++) {
-				print_op2<OP_EQ>(LAMBDA(c_i.coefficients[k]), c_j.coefficients[k]);
+				print_op2<OP_EQ>(c_i.coefficients[k], c_j.coefficients[k]);
 			}
 			 
 			for(unsigned long k: variable_integral_vector) {
-				print_op1<OP_INTEGRAL>(LAMBDA(c_i.coefficients[k]));
+				print_op1<OP_INTEGRAL>(c_i.coefficients[k]);
 			}
 
 			for(unsigned long k: variable_non_integral_vector) {
-				print_op2<OP_EQ>(LAMBDA(c_i.coefficients[k]), LITERAL(0));
+				print_op2<OP_EQ>(c_i.coefficients[k], LITERAL(0));
 			}
 			
-			print_op1<OP_INTEGRAL>(LAMBDA(print_number(c_i.target)));
-			print_op1<OP_INTEGRAL>(LAMBDA(print_number(c_j.target)));
+			print_op1<OP_INTEGRAL>(c_i.target);
+			print_op1<OP_INTEGRAL>(c_j.target);
 
 			print_op2<OP_AND>(
 				LAMBDA(print_op2<OP_NEQ>(
@@ -861,16 +873,23 @@ void Certificate::print_asm_individual(unsigned long derivation_index, Derivatio
 void Certificate::print_LIN_RND_aj(unsigned long derivation_index, Derivation &derivation, unsigned long j) {
 	vector<unsigned long> &data = derivation.reason.constraint_indexes;
 
-	for(unsigned long j = 0; j < data.size(); j++) {
-		// Using the same indexes as the definitions
-		unsigned long i = derivation.reason.constraint_indexes[j];
-		Number &data_i = derivation.reason.constraint_multipliers[j];
+	print_op1<OP_PLUS>(LAMBDA(
+		MIN_SET(2);
 
-		print_op2<OP_TIMES>(
-			data_i,
-			LAMBDA(constraints[i].coefficients[j])
-		);
-	}
+		for(unsigned long j = 0; j < data.size(); j++) {
+			// Using the same indexes as the definitions
+			unsigned long i = derivation.reason.constraint_indexes[j];
+			Number &data_i = derivation.reason.constraint_multipliers[j];
+
+			print_op2<OP_TIMES>(
+				data_i,
+				LAMBDA(print_number(constraints[i].coefficients[j]))
+			);
+			MIN_COUNT;
+		}
+
+		MIN_ENSURE_ZERO;
+	));
 }
 
 void Certificate::print_LIN_RND_aPj(unsigned long derivation_index, Derivation &derivation, unsigned long j) {
@@ -880,16 +899,23 @@ void Certificate::print_LIN_RND_aPj(unsigned long derivation_index, Derivation &
 void Certificate::print_LIN_RND_b(unsigned long derivation_index, Derivation &derivation) {
 	vector<unsigned long> &data = derivation.reason.constraint_indexes;
 
-	for(unsigned long j = 0; j < data.size(); j++) {
-		// Using the same indexes as the definitions
-		unsigned long i = derivation.reason.constraint_indexes[j];
-		Number &data_i = derivation.reason.constraint_multipliers[j];
+	print_op1<OP_PLUS>(LAMBDA(
+		MIN_SET(2);
 
-		print_op2<OP_TIMES>(
-			data_i,
-			LAMBDA(print_number(constraints[i].target))
-		);
-	}
+		for(unsigned long j = 0; j < data.size(); j++) {
+			// Using the same indexes as the definitions
+			unsigned long i = derivation.reason.constraint_indexes[j];
+			Number &data_i = derivation.reason.constraint_multipliers[j];
+
+			print_op2<OP_TIMES>(
+				data_i,
+				LAMBDA(print_number(constraints[i].target))
+			);
+			MIN_COUNT;
+		}
+
+		MIN_ENSURE_ZERO;
+	));
 }
 
 void Certificate::print_LIN_RND_bP(unsigned long derivation_index, Derivation &derivation) {
@@ -1076,12 +1102,19 @@ void Certificate::print_uns_individual(unsigned long derivation_index, Derivatio
 		// Not counting because the number of operations is always >= 2
 
 		print_ASM(derivation_index, derivation);
+		write_output(" ");
 		print_op2<OP_G>(derivation_index, derivation.reason.get_i1());
+		write_output(" ");
 		print_op2<OP_G>(derivation_index, derivation.reason.get_i2());
+		write_output(" ");
 		print_DOM(constraints[derivation.reason.get_i1()], derivation.get_constraint(constraints));
+		write_output(" ");
 		print_DOM(constraints[derivation.reason.get_i2()], derivation.get_constraint(constraints));
+		write_output(" ");
 		print_bool(calculate_Aij(derivation.reason.get_i1(), derivation.reason.get_l1()));
+		write_output(" ");
 		print_bool(calculate_Aij(derivation.reason.get_i2(), derivation.reason.get_l2()));
+		write_output(" ");
 		print_DIS(constraints[derivation.reason.get_l1()], constraints[derivation.reason.get_l2()]);
 	));
 }
