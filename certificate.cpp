@@ -881,6 +881,12 @@ void Certificate::print_LIN_RND_aj(unsigned long derivation_index, Derivation &d
 			unsigned long i = derivation.reason.constraint_indexes[j];
 			Number &data_i = derivation.reason.constraint_multipliers[j];
 
+#ifndef FULL_MODEL
+			if(data_i.is_zero() || constraints[i].coefficients[j].is_zero()) {
+				continue;
+			}
+#endif /* FULL_MODEL */
+
 			print_op2<OP_TIMES>(
 				data_i,
 				LAMBDA(print_number(constraints[i].coefficients[j]))
@@ -907,6 +913,12 @@ void Certificate::print_LIN_RND_b(unsigned long derivation_index, Derivation &de
 			unsigned long i = derivation.reason.constraint_indexes[j];
 			Number &data_i = derivation.reason.constraint_multipliers[j];
 
+#ifndef FULL_MODEL
+			if(data_i.is_zero() || constraints[i].target.is_zero()) {
+				continue;
+			}
+#endif /* FULL_MODEL */
+
 			print_op2<OP_TIMES>(
 				data_i,
 				LAMBDA(print_number(constraints[i].target))
@@ -932,6 +944,12 @@ void Certificate::print_conjunction_eq_leq_geq(unsigned long derivation_index, D
 			// Using the same indexes as the definitions
 			unsigned long i = derivation.reason.constraint_indexes[j];
 			Number &data_i = derivation.reason.constraint_multipliers[j];
+
+#ifndef FULL_MODEL
+			if(data_i.is_zero() || constraints[i].direction == Direction::Equal) {
+				continue;
+			}
+#endif /* FULL_MODEL */
 
 			print_direction_op2(
 				direction,
