@@ -227,7 +227,7 @@ int main(int argc, char **argv) {
 			char *token = parser.get_token();
 
 			// Infeasible
-			if(strcmp(token, "ifeas")) {
+			if(strcmp(token, "infeas")) {
 				certificate.feasible = false;
 			}
 			// Feasible + range
