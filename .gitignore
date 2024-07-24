@@ -1,0 +1,5 @@
+vipr_checker
+*.o
+*.vipr
+*.smt
+cvc5*
