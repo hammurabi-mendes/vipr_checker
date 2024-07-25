@@ -210,8 +210,11 @@ struct Certificate {
 private:
 	bool get_PUB();
 	bool get_PLB();
+
 	Number &get_L();
 	Number &get_U();
+
+	Derivation &get_derivation_from_offset(unsigned long offset);
 
 	void calculate_dependencies();
 

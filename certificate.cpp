@@ -84,13 +84,13 @@ void Certificate::calculate_dependencies() {
 	for(unsigned long i = number_problem_constraints; i < number_total_constraints; i++) {
 		dependencies[i] = new unordered_set<unsigned long>();
 
-		switch(derivations[i].reason.type) {
+		switch(get_derivation_from_offset(i).reason.type) {
 			case ReasonType::TypeASM:
 				dependencies[i]->insert(i);
 				break;
 			case ReasonType::TypeLIN:
 			case ReasonType::TypeRND:
-				for(unsigned long dependency_index: derivations[i].reason.constraint_indexes) {
+				for(unsigned long dependency_index: get_derivation_from_offset(i).reason.constraint_indexes) {
 					// If it is one of the problem constraints, there are no assumptions
 					if(dependency_index < number_problem_constraints) {
 						continue;
@@ -107,28 +107,28 @@ void Certificate::calculate_dependencies() {
 				}
 				break;
 			case ReasonType::TypeUNS:
-				for(unsigned long dependency_index: derivations[i].reason.constraint_indexes) {
+				for(unsigned long dependency_index: get_derivation_from_offset(i).reason.constraint_indexes) {
 	 				// If the dependency has index bigger than or equal to the current one
 					if(dependency_index >= i) {
 						throw runtime_error(format("Constraint {} has dependency {} with index bigger than or equal to itself\n", i, dependency_index));
 					}
 				}
 
-				unsigned long dependency_index1 = derivations[i].reason.get_i1();
+				unsigned long dependency_index1 = get_derivation_from_offset(i).reason.get_i1();
 
 				if(dependency_index1 >= number_problem_constraints) {
 					auto &other_dependency1 = dependencies[dependency_index1];
-					unsigned long exclusion1 = derivations[i].reason.get_l1();
+					unsigned long exclusion1 = get_derivation_from_offset(i).reason.get_l1();
 
 					dependencies[i]->insert(other_dependency1->begin(), other_dependency1->end());
 					dependencies[i]->erase(exclusion1);
 				}
 
-				unsigned long dependency_index2 = derivations[i].reason.get_i2();
+				unsigned long dependency_index2 = get_derivation_from_offset(i).reason.get_i2();
 
 				if(dependency_index2 >= number_problem_constraints) {
 					auto &other_dependency2 = dependencies[dependency_index2];
-					unsigned long exclusion2 = derivations[i].reason.get_l2();
+					unsigned long exclusion2 = get_derivation_from_offset(i).reason.get_l2();
 
 					// Only exclude if exclusion2 was not added twice
 
@@ -357,6 +357,10 @@ Number &Certificate::get_L() {
 	return (get_PLB() ? feasible_lower_bound : zero);
 }
 
+Derivation &Certificate::get_derivation_from_offset(unsigned long offset) {
+	return derivations[offset - number_problem_constraints];
+}
+
 void Certificate::print_pub() {
 	print_op2<OP_AND>(
 		feasible,
@@ -543,7 +547,7 @@ bool Certificate::calculate_Aij(unsigned long i, unsigned long j) {
 
 void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 	for(unsigned long j = k + 1; j < number_total_constraints; j++) {
-		if(derivations[j].reason.type == ReasonType::TypeASM) {
+		if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 			print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(k, j))));
 		}
 	}
@@ -557,7 +561,7 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 						MIN_SET(2);
 
 						for(unsigned long j = number_problem_constraints; j < k; j++) {
-							if(derivations[j].reason.type == ReasonType::TypeASM) {
+							if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 								print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(k, j))));
 								MIN_COUNT;
 							}
@@ -574,7 +578,7 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 				MIN_SET(2);
 
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
-					if(derivations[j].reason.type == ReasonType::TypeASM) {
+					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 						print_op2<OP_EQ>(
 							LAMBDA(print_bool(calculate_Aij(k, j))),
 							LAMBDA(print_op1<OP_OR>(
@@ -607,7 +611,7 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 				MIN_SET(2);
 
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
-					if(derivations[j].reason.type == ReasonType::TypeASM) {
+					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 						print_op2<OP_EQ>(
 							LAMBDA(print_bool(calculate_Aij(k, j))),
 							LAMBDA(print_op2<OP_OR>(
@@ -633,7 +637,7 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 				MIN_SET(2);
 
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
-					if(derivations[j].reason.type == ReasonType::TypeASM) {
+					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 						print_op1<OP_NOT>(
 							LAMBDA(print_bool(calculate_Aij(k, j)))
 						);
@@ -894,10 +898,10 @@ void Certificate::print_LIN_RND_aj(unsigned long derivation_index, Derivation &d
 	print_op1<OP_PLUS>(LAMBDA(
 		MIN_SET(2);
 
-		for(unsigned long j = 0; j < data.size(); j++) {
+		for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
 			// Using the same indexes as the definitions
-			unsigned long i = derivation.reason.constraint_indexes[j];
-			Number &data_i = derivation.reason.constraint_multipliers[j];
+			unsigned long i = derivation.reason.constraint_indexes[data_position];
+			Number &data_i = derivation.reason.constraint_multipliers[data_position];
 
 #ifndef FULL_MODEL
 			if(data_i.is_zero() || constraints[i].coefficients[j].is_zero()) {
@@ -926,10 +930,10 @@ void Certificate::print_LIN_RND_b(unsigned long derivation_index, Derivation &de
 	print_op1<OP_PLUS>(LAMBDA(
 		MIN_SET(2);
 
-		for(unsigned long j = 0; j < data.size(); j++) {
+		for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
 			// Using the same indexes as the definitions
-			unsigned long i = derivation.reason.constraint_indexes[j];
-			Number &data_i = derivation.reason.constraint_multipliers[j];
+			unsigned long i = derivation.reason.constraint_indexes[data_position];
+			Number &data_i = derivation.reason.constraint_multipliers[data_position];
 
 #ifndef FULL_MODEL
 			if(data_i.is_zero() || constraints[i].target.is_zero()) {
@@ -958,10 +962,10 @@ void Certificate::print_conjunction_eq_leq_geq(unsigned long derivation_index, D
 	print_op1<OP_AND>(LAMBDA(
 		MIN_SET(2);
 
-		for(unsigned long j = 0; j < data.size(); j++) {
+		for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
 			// Using the same indexes as the definitions
-			unsigned long i = derivation.reason.constraint_indexes[j];
-			Number &data_i = derivation.reason.constraint_multipliers[j];
+			unsigned long i = derivation.reason.constraint_indexes[data_position];
+			Number &data_i = derivation.reason.constraint_multipliers[data_position];
 
 #ifndef FULL_MODEL
 			if(data_i.is_zero() || constraints[i].direction == Direction::Equal) {
@@ -1288,8 +1292,8 @@ void Certificate::print_der() {
 				print_op1<OP_AND>(LAMBDA(
 					MIN_SET(2);
 
-					for(unsigned long i = 0; i < number_derived_constraints; i++) {
-						Derivation &derivation = derivations[i];
+					for(unsigned long i = number_problem_constraints; i < number_total_constraints; i++) {
+						Derivation &derivation = get_derivation_from_offset(i);
 
 						print_der_individual(i, derivation);
 
@@ -1321,8 +1325,8 @@ void Certificate::print_der() {
 							LAMBDA(print_integral_string("1"))
 						)),
 						LAMBDA(
-							for(unsigned long j = 0; j < number_derived_constraints; j++) {
-								if(derivations[j].reason.type == ReasonType::TypeASM) {
+							for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+								if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 									print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
 								}
 							}
@@ -1348,8 +1352,8 @@ void Certificate::print_der() {
 									LAMBDA(print_number(get_L()))
 								)),
 								LAMBDA(
-									for(unsigned long j = 0; j < number_derived_constraints; j++) {
-										if(derivations[j].reason.type == ReasonType::TypeASM) {
+									for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+										if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 											print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
 										}
 									}
@@ -1377,8 +1381,8 @@ void Certificate::print_der() {
 									LAMBDA(print_number(get_U()))
 								)),
 								LAMBDA(
-									for(unsigned long j = 0; j < number_derived_constraints; j++) {
-										if(derivations[j].reason.type == ReasonType::TypeASM) {
+									for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+										if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
 											print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
 										}
 									}
