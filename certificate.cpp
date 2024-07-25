@@ -339,6 +339,24 @@ inline void print_s(Direction direction) {
 // Print model constraints //
 /////////////////////////////
 
+static Number zero("0");
+
+bool Certificate::get_PUB() {
+	return (feasible && !feasible_upper_bound.is_positive_infinity);
+}
+
+bool Certificate::get_PLB() {
+	return (feasible && !feasible_lower_bound.is_negative_infinity);
+}
+
+Number &Certificate::get_U() {
+	return (get_PUB() ? feasible_upper_bound : zero);
+}
+
+Number &Certificate::get_L() {
+	return (get_PLB() ? feasible_lower_bound : zero);
+}
+
 void Certificate::print_pub() {
 	print_op2<OP_AND>(
 		feasible,
@@ -487,14 +505,14 @@ void Certificate::print_feas() {
 void Certificate::print_pubimplication() {
 	print_op2<OP_IMPLICATION>(
 		LAMBDA(print_pub()),
-		LAMBDA(print_one_solution_within_bound(Direction::SmallerEqual, feasible_upper_bound))
+		LAMBDA(print_one_solution_within_bound(Direction::SmallerEqual, get_U()))
 	);
 }
 
 void Certificate::print_plbimplication() {
 	print_op2<OP_IMPLICATION>(
 		LAMBDA(print_plb()),
-		LAMBDA(print_one_solution_within_bound(Direction::GreaterEqual, feasible_lower_bound))
+		LAMBDA(print_one_solution_within_bound(Direction::GreaterEqual, get_L()))
 	);
 }
 
@@ -1327,7 +1345,7 @@ void Certificate::print_der() {
 										print_number(objective_coefficients[j]);
 									},
 									LAMBDA(print_s(Direction::GreaterEqual)),
-									LAMBDA(print_number(feasible_lower_bound))
+									LAMBDA(print_number(get_L()))
 								)),
 								LAMBDA(
 									for(unsigned long j = 0; j < number_derived_constraints; j++) {
@@ -1356,7 +1374,7 @@ void Certificate::print_der() {
 										print_number(objective_coefficients[j]);
 									},
 									LAMBDA(print_s(Direction::SmallerEqual)),
-									LAMBDA(print_number(feasible_upper_bound))
+									LAMBDA(print_number(get_U()))
 								)),
 								LAMBDA(
 									for(unsigned long j = 0; j < number_derived_constraints; j++) {

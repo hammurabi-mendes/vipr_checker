@@ -208,6 +208,11 @@ struct Certificate {
 	void print();
 
 private:
+	bool get_PUB();
+	bool get_PLB();
+	Number &get_L();
+	Number &get_U();
+
 	void calculate_dependencies();
 
 	void print_pub();
