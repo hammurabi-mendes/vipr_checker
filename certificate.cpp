@@ -455,7 +455,9 @@ void Certificate::print_feas_individual(Solution &solution) {
 			MIN_COUNT;
 		}
 
-		for(auto &constraint: constraints) {
+		for(int constraint_index = 0; constraint_index < number_problem_constraints; constraint_index++) {
+			Constraint &constraint = constraints[constraint_index];
+
 			print_op2<OP_IMPLICATION>(
 				LAMBDA(print_op2<OP_GEQ>(
 					LAMBDA(print_s(constraint.direction)),
