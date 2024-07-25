@@ -973,7 +973,7 @@ void Certificate::print_conjunction_eq_leq_geq(unsigned long derivation_index, D
 				direction,
 				LAMBDA(
 					print_op2<OP_TIMES>(
-						data[i],
+						data_i,
 						LAMBDA(print_s(constraints[i].direction))
 					)
 				),
