@@ -250,9 +250,6 @@ int main(int argc, char **argv) {
 			for(unsigned long i = 0; i < certificate.number_solutions; i++) {
 				char *name = parser.get_stable_string(parser.get_token());
 				
-                                if(strcmp(name, "DER") == 0){
-                                fprintf(stderr, "No solutions found, but number of solutions reported positive");
-					
 				vector<Number> solution_coefficients;
 
 				solution_coefficients.resize(certificate.number_variables);
