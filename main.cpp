@@ -227,11 +227,11 @@ int main(int argc, char **argv) {
 			char *token = parser.get_token();
 
 			// Infeasible
-			if(strcmp(token, "infeas")) {
+			if(strcmp(token, "infeas") == 0) {
 				certificate.feasible = false;
 			}
 			// Feasible + range
-			else if(strcmp(token, "range")) {
+			else if(strcmp(token, "range") == 0) {
 				certificate.feasible = true;
 
 				certificate.feasible_lower_bound = parser.get_number_or_infinity();
