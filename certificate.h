@@ -214,8 +214,6 @@ private:
 	Number &get_L();
 	Number &get_U();
 
-	Derivation &get_derivation_from_offset(unsigned long offset);
-
 	void calculate_dependencies();
 
 	void print_pub();
@@ -285,6 +283,10 @@ private:
 	void print_der_individual(unsigned long derivation_index, Derivation &derivation);
 	void print_der();
 	// End DER predicate
+
+	inline Derivation &get_derivation_from_offset(unsigned long offset) {
+		return derivations[offset - number_problem_constraints];
+	}
 };
 
 #endif /* CERTIFICATE_H */

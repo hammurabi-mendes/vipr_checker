@@ -357,10 +357,6 @@ Number &Certificate::get_L() {
 	return (get_PLB() ? feasible_lower_bound : zero);
 }
 
-Derivation &Certificate::get_derivation_from_offset(unsigned long offset) {
-	return derivations[offset - number_problem_constraints];
-}
-
 void Certificate::print_pub() {
 	print_op2<OP_AND>(
 		feasible,
