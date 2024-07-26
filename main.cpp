@@ -139,27 +139,51 @@ inline Reason read_reason(Parser &parser) {
 int main(int argc, char **argv) {
 	// Checks if the correct parameters were provided
 
-	if(argc < 3) {
-		fprintf(stderr, "usage: %s <vipr_certificate_in> <vipr_certificate_out> [block_size]\n", argv[0]);
+	if(argc < 4) {
+		fprintf(stderr, "usage: %s <vipr_certificate_in> <vipr_certificate_out> <expected_answer> [block_size]\n", argv[0]);
+		fprintf(stderr, "\n");
+		fprintf(stderr, "<expected_answer> should be either \"sat\" or \"unsat\"\n");
+		fprintf(stderr, "[block_size] (optional): # derivations dispatched at once to the checker");
 
 		return EXIT_FAILURE;
 	}
 
+	// Arguments #1 and #2
+	char *input_filename = argv[1];
 	char *output_filename = argv[2];
 
+	// Argument #3
+	bool expected_sat;
+
+	if(strcmp(argv[3], "sat") == 0) {
+		expected_sat = true;
+	}
+	else if(strcmp(argv[3], "unsat") == 0) {
+		expected_sat = false;
+	}
+	else {
+		fprintf(stderr, "<expected_answer> should be either \"sat\" or \"unsat\"\n");
+
+		return EXIT_FAILURE;
+	}
+
+	// Argument #4
 	unsigned long block_size = 0;
 
-	if(argc >= 4) {
-		block_size = atoi(argv[3]);
+	if(argc >= 5) {
+		block_size = atoi(argv[4]);
 	}
 
 	// Creates the parser object that will return lines and tokens
 
-	Parser parser(argv[1]);
+	Parser parser(input_filename);
 
 	Certificate certificate;
 
 	// Main parsing loop
+
+	// Keep track of the computation time
+	auto begin_time = std::chrono::high_resolution_clock::now();
 
 	char *line;
 	char *token;
@@ -299,7 +323,16 @@ int main(int argc, char **argv) {
 	}
 
 	certificate.precompute();
-	certificate.print_formula(output_filename, block_size);
+	certificate.setup_output(output_filename, expected_sat, block_size);
+	certificate.print_formula();
+
+	// Keep track of the computation time
+	auto end_time = std::chrono::high_resolution_clock::now();
+	long long elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();
+
+	bool result_ok = certificate.get_evaluation_result();
+
+	fprintf(stderr, "Results: %s|%s|%lld\n", input_filename, (result_ok ? "OK" : "ERR"), elapsed);
 
 	return EXIT_SUCCESS;
 }

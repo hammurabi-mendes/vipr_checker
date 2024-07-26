@@ -46,9 +46,16 @@ public:
 		WaitFirstFaulty
 	};
 
+	enum ClearingResult {
+		Sat,
+		Unsat,
+		Done
+	};
+
 private:
 	vector<Machine *> remote_machines;
 	vector<Dispatch *> remote_dispatches;
+	vector<Dispatch *> delayed_dispatches;
 	vector<future<bool>> remote_dispatch_results;
 
 	uint search_offset;
@@ -60,12 +67,14 @@ public:
 	virtual ~RemoteExecutionManager();
 
 	void add_machine(string machine_name, uint numberSlots);
-	void dispatch(string command, uint line);
+	int find_machine();
+
+	void dispatch(string filename, uint line);
+	void dispatch(Dispatch *dispatch);
 
 	string run_local(string command);
 
-	Dispatch *collect_ready_dispatches(WaitMode waitMode = WaitMode::NoWait);
-	Dispatch *clear_dispatches();
+	ClearingResult clear_dispatches();
 };
 
 #endif /* REMOTE_EXECUTION_MANAGER_H */

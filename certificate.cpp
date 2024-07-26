@@ -571,7 +571,7 @@ void Certificate::print_sol() {
 		output_stream->close();
 
 		// Dispatches the work to the execution manager
-		dispatch(section_output_filename, 0);
+		remote_execution_manager.dispatch(section_output_filename, 0);
 	});
 #else
 	task_print_sol();
@@ -1373,7 +1373,7 @@ void Certificate::print_der() {
 				output_stream->close();
 
 				// Dispatches the work to the execution manager
-				dispatch(section_output_filename, 0);
+				remote_execution_manager.dispatch(section_output_filename, 0);
 			}
 		},
 		core);
@@ -1491,17 +1491,20 @@ void Certificate::print_der() {
 		output_stream->close();
 
 		// Dispatches the work to the execution manager
-		dispatch(section_output_filename, 0);
+		remote_execution_manager.dispatch(section_output_filename, 0);
 	});
 #else
 	task_der_part2();
 #endif /* PARALLEL */
 }
 
-void Certificate::print_formula(string output_filename, unsigned long block_size) {
+void Certificate::setup_output(string output_filename, bool expected_sat, unsigned long block_size) {
 	this->output_filename = output_filename;
+	this->expected_sat = expected_sat;
 	this->block_size = block_size;
+}
 
+void Certificate::print_formula() {
 #ifndef PARALLEL
 	// Open the single output file and print header
 	output_stream = new ofstream(output_filename);
@@ -1522,7 +1525,7 @@ void Certificate::print_formula(string output_filename, unsigned long block_size
 		thread.join();
 	}
 #else
-	dispatch(output_filename, 0);
+	remote_execution_manager.dispatch(output_filename, 0);
 #endif /* PARALLEL */
 }
 
@@ -1580,30 +1583,34 @@ void Certificate::print() {
 	}
 }
 
-void Certificate::dispatch(string filename, unsigned long line) {
-	remote_execution_manager.dispatch(filename, line);
-
-	// Collect all dispatches that are ready
-	// If one of them returned false, we get notified.
-	RemoteExecutionManager::Dispatch *first_faulty_dispatch = nullptr;
-
-	if((first_faulty_dispatch = remote_execution_manager.collect_ready_dispatches()) != nullptr) {
-		fprintf(stderr, "Error in VIPR line %u\n", first_faulty_dispatch->line);
-		
-		exit(EXIT_FAILURE);
-	}
-}
-
 Certificate::Certificate() {
 }
 
 Certificate::~Certificate() {
-	// Clears all pending dispatches and leaves the program if one of them fails
-	RemoteExecutionManager::Dispatch *first_faulty_dispatch = nullptr;
+}
 
-	if((first_faulty_dispatch = remote_execution_manager.clear_dispatches()) != nullptr) {
-		fprintf(stderr, "Error in VIPR line %u\n", first_faulty_dispatch->line);
+bool Certificate::get_evaluation_result() {
+	// Clears all pending dispatches and leaves the program if one of them fails
+	RemoteExecutionManager::ClearingResult result;
+
+	while((result = remote_execution_manager.clear_dispatches()) != RemoteExecutionManager::ClearingResult::Done) {
+		if(result == RemoteExecutionManager::ClearingResult::Unsat && expected_sat == true) {
+			// Expected sat, did not get sat in all dispatches
+			return false;
+		}
 		
-		exit(EXIT_FAILURE);
+		if(result == RemoteExecutionManager::ClearingResult::Unsat && expected_sat == false) {
+			// Expected unsat, did not get sat in all dispatches
+			return true;
+		}
+	}
+
+	if(expected_sat) {
+		// Expected sat, got sat in all dispatches
+		return true;
+	}
+	else {
+		// Expected unsat, got sat in all dispatches
+		return false;
 	}
 }

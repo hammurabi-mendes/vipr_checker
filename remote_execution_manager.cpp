@@ -47,64 +47,74 @@ void RemoteExecutionManager::add_machine(string machine_name, uint numberSlots) 
 }
 
 /**
+    Returns the index of an available machine.
+ 
+	@return The index of an available machine or -1 if none are available.
+ */
+int RemoteExecutionManager::find_machine() {
+	// Find a machine to execute
+	int next_machine = -1;
+
+	for(uint i = 0; i < remote_machines.size(); i++) {
+		uint j = (i + search_offset) % remote_machines.size();
+
+		// Note that this only works because we are assuming that there is a single
+		// dispatcher thread
+		if(remote_machines[j]->numberSlots > 0) {
+			remote_machines[j]->numberSlots.fetch_sub(1);
+
+			next_machine = j;
+			break;
+		}
+	}
+
+	if(next_machine != -1) {
+		// Next time, start from a different entry
+		search_offset++;
+	}
+
+	return next_machine;
+}
+
+/**
 	Dispatches a command to one remote machine in the machine dataset.
+	If no machine is available, queue the dispatch.
 
 	@param command Command to execute in the remote machine
 	@param line Line in the VIPR file to which the execution is related
 */
-void RemoteExecutionManager::dispatch(string old_filename, uint line) {
+void RemoteExecutionManager::dispatch(string filename, uint line) {
 	// Serialize concurrent calls to this method
 	std::lock_guard<std::mutex> lock(serializer);
 
 	// Find a machine to execute
-	int next_machine = -1;
+	int next_machine = find_machine();
 
-	while(next_machine == -1) {
-		for(uint i = 0; i < remote_machines.size(); i++) {
-			uint j = (i + search_offset) % remote_machines.size();
-
-			// Note that this only works because we are assuming that there is a single
-			// dispatcher thread
-			if(remote_machines[j]->numberSlots > 0) {
-				remote_machines[j]->numberSlots.fetch_sub(1);
-
-				next_machine = j;
-				break;
-			}
-		}
-
-		if(next_machine == -1) {
-			collect_ready_dispatches(WaitFirst);
-		}
+	if(next_machine == -1) {
+		delayed_dispatches.emplace_back(new Dispatch(nullptr, filename, line));
+		return;
 	}
 
-	// Next time, start from a different entry
-	search_offset++;
-
-	// Generate a unique filename for the execution based on this template
-	char new_filename_template[FILENAME_MAX];
-	strcpy(new_filename_template, "SMT_XXXXXX.smt");
-
-	// We need to generate files using mkstemps in order to avoid an unlikely (but possible) race condition in the filesystem
-	// as we create files with random names
-	int new_filename_fd = mkstemps(new_filename_template, 4);
-	close(new_filename_fd);
-
-	// At this point, new_filename_template has been modified and contains a unique filename
-	string new_filename = std::string(new_filename_template);
-
-	// Rename the old filename to the new filename
-	run_local(string("mv " + old_filename + " " + new_filename));
-
 	// Create the dispatch to the available machine
-	Dispatch *dispatch = new Dispatch(remote_machines[next_machine], new_filename, line);
+	Dispatch *next_dispatch = new Dispatch(remote_machines[next_machine], filename, line);
+
+	dispatch(next_dispatch);
+}
+
+/**
+	Dispatches a command to one remote machine in the machine dataset.
+	Assumes a dispatch object has been created and a machine is available.
+
+	@param dispatch Dispatch to send to the remote machine
+*/
+void RemoteExecutionManager::dispatch(Dispatch *dispatch) {
 	remote_dispatches.push_back(dispatch);
 
 	// Launch a separate thread that will run the task remotely, collect the result
 	// and fill up the dispatch result with the outcome
 	remote_dispatch_results.emplace_back(
 		std::move(async(std::launch::async, [this, dispatch] {
-			string ssh_command = "ssh " + dispatch->machine->name + " <working directory>/local_runner.sh " + dispatch->filename;
+			string ssh_command = "ssh " + dispatch->machine->name + " <working_directory>/local_runner.sh " + dispatch->filename;
 
 			string output = run_local(ssh_command);
 
@@ -150,83 +160,54 @@ string RemoteExecutionManager::run_local(string command) {
 }
 
 /**
-	Collects all dispatches that are ready.
-
-	@param wait Specifies the waiting mode of the function:
-		1) If WaitMode::NoWait, returns nullptr if no dispatch is ready.
-		2) If WaitMode::WaitFirst, returns nullptr if the outcome of the collected dispatch was successful,
-			or a pointer to the (faulty) collected dispatch otherwise.
-		3) If WaitMode::WaitFirstFaulty, returns nullptr only if all dispatches have been collected or if
-			a faulty dispatch is collected.
-
-	@return A pointer to a faulty dispatch, if one is collected; or a null pointer otherwise.
+	Waits until all previous dispatches were successful.
 */
-RemoteExecutionManager::Dispatch *RemoteExecutionManager::collect_ready_dispatches(RemoteExecutionManager::WaitMode waitMode) {
+RemoteExecutionManager::ClearingResult RemoteExecutionManager::clear_dispatches() {
 	// Serialize concurrent calls to this method
 	std::lock_guard<std::mutex> lock(serializer);
 
 	while(true) {
-		bool foundDispatches = false;
+		bool restart = false;
 
 		for(uint i = 0; i < remote_dispatches.size(); i++) {
 			if(!remote_dispatches[i]) {
 				continue;
 			}
 
-			foundDispatches = true;
+			bool success = remote_dispatch_results[i].get();
 
-			if (remote_dispatch_results[i].wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-				bool success = remote_dispatch_results[i].get();
+			// If we just completed one dispatch and we have queued dispatches,
+			// schedule them right now
+			if(delayed_dispatches.size() != 0) {
+				Machine *old_machine = remote_dispatches[i]->machine;
 
-				Dispatch *remote_dispatch = remote_dispatches[i];
-				remote_dispatches[i] = nullptr;
+				Dispatch *new_dispatch = delayed_dispatches.back();
+				delayed_dispatches.pop_back();
 
-				if(!success) {
-					return remote_dispatch;
-				}
-				else {
-					delete remote_dispatch;
+				new_dispatch->machine = old_machine;
+				dispatch(new_dispatch);
 
-					if(waitMode == WaitFirst) {
-						return nullptr;
-					}
-				}
+				// UGH, but I'm in a hurry
+				restart = true;
+				break;
+			}
+
+			// Clean the old dispatch information
+			remote_dispatches[i] = nullptr;
+			delete remote_dispatches[i];
+
+			if(success) {
+				return ClearingResult::Sat;
+			}
+			else {
+				return ClearingResult::Unsat;
 			}
 		}
 
-		if(waitMode == NoWait || !foundDispatches) {
+		if(!restart) {
 			break;
 		}
-
-		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
 
-	return nullptr;
-}
-
-/**
-	Waits until all previous dispatches were successful.
-*/
-RemoteExecutionManager::Dispatch *RemoteExecutionManager::clear_dispatches() {
-	// Serialize concurrent calls to this method
-	std::lock_guard<std::mutex> lock(serializer);
-
-	for(uint i = 0; i < remote_dispatches.size(); i++) {
-		if(!remote_dispatches[i]) {
-			continue;
-		}
-
-		bool success = remote_dispatch_results[i].get();
-
-		if(!success) {
-			return remote_dispatches[i];
-		}
-		else {
-			delete remote_dispatches[i];
-
-			remote_dispatches[i] = nullptr;
-		}
-	}
-
-	return nullptr;
+	return ClearingResult::Done;
 }

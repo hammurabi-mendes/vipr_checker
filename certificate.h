@@ -206,21 +206,6 @@ struct Certificate {
 
 	vector<unordered_set<unsigned long> *> dependencies;
 
-	/////////////////////
-	// Output settings //
-	/////////////////////
-
-#ifdef PARALLEL
-	vector<thread> threads;
-#endif /* PARALLEL */
-
-	RemoteExecutionManager remote_execution_manager;
-
-	string output_filename; 
-	unsigned long block_size;
-
-	void dispatch(string filename, unsigned long line);
-
 	//////////////////////////////////
 	// Constructors and destructors //
 	//////////////////////////////////
@@ -232,10 +217,18 @@ struct Certificate {
 	// Print and file generation functions //
 	/////////////////////////////////////////
 
+	void setup_output(string output_filename, bool expected_sat, unsigned long block_size);
+
 	void precompute();
-	void print_formula(string output_filename, unsigned long block_size);
+	void print_formula();
 
 	void print();
+
+	////////////////////////////////////
+	// Output variables and functions //
+	////////////////////////////////////
+
+	bool get_evaluation_result();
 
 private:
 	bool get_PUB();
@@ -317,6 +310,20 @@ private:
 	inline Derivation &get_derivation_from_offset(unsigned long offset) {
 		return derivations[offset - number_problem_constraints];
 	}
+
+	////////////////////////////////////
+	// Output variables and functions //
+	////////////////////////////////////
+
+#ifdef PARALLEL
+	vector<thread> threads;
+#endif /* PARALLEL */
+
+	RemoteExecutionManager remote_execution_manager;
+
+	string output_filename; 
+	bool expected_sat;
+	unsigned long block_size;
 };
 
 #endif /* CERTIFICATE_H */
