@@ -10,6 +10,8 @@
 #include <atomic>
 #include <future>
 
+#include <mutex>
+
 using std::vector;
 using std::queue;
 using std::shared_ptr;
@@ -18,6 +20,8 @@ using std::string;
 
 using std::atomic_uint;
 using std::future;
+
+using std::mutex;
 
 class RemoteExecutionManager {
 public:
@@ -48,6 +52,8 @@ private:
 	vector<future<bool>> remote_dispatch_results;
 
 	uint search_offset;
+
+	mutex serializer;
 
 public:
 	RemoteExecutionManager();

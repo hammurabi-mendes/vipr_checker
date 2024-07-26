@@ -11,6 +11,8 @@
 
 #include "basic_types.h"
 
+#include "remote_execution_manager.h"
+
 using std::set;
 using std::vector;
 using std::unordered_set;
@@ -212,8 +214,23 @@ struct Certificate {
 	vector<thread> threads;
 #endif /* PARALLEL */
 
+	RemoteExecutionManager remote_execution_manager;
+
 	string output_filename; 
 	unsigned long block_size;
+
+	void dispatch(string filename, unsigned long line);
+
+	//////////////////////////////////
+	// Constructors and destructors //
+	//////////////////////////////////
+
+	Certificate();
+	virtual ~Certificate();
+
+	/////////////////////////////////////////
+	// Print and file generation functions //
+	/////////////////////////////////////////
 
 	void precompute();
 	void print_formula(string output_filename, unsigned long block_size);

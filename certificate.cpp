@@ -559,7 +559,9 @@ void Certificate::print_sol() {
 #ifdef PARALLEL
 	threads.emplace_back([&, this] {
 		// Open the file for SOL and print header
-		output_stream = new ofstream(output_filename + ".SOL");
+		string section_output_filename = output_filename + ".SOL";
+
+		output_stream = new ofstream(section_output_filename);
 		print_header();
 
 		task_print_sol();
@@ -567,6 +569,9 @@ void Certificate::print_sol() {
 		// Print footer and close the file for block number
 		print_footer();
 		output_stream->close();
+
+		// Dispatches the work to the execution manager
+		dispatch(section_output_filename, 0);
 	});
 #else
 	task_print_sol();
@@ -1354,7 +1359,9 @@ void Certificate::print_der() {
 				unsigned long global_index_finish = std::min(global_index_start + block_size, number_total_constraints) - 1;
 
 				// Open the file for block number and print header
-				output_stream = new ofstream(output_filename + ".DER-" + std::to_string(global_index_start - number_problem_constraints + 1) + "-" + std::to_string(global_index_finish - number_problem_constraints + 1));
+				string section_output_filename = output_filename + ".DER-" + std::to_string(global_index_start - number_problem_constraints + 1) + "-" + std::to_string(global_index_finish - number_problem_constraints + 1);
+				
+				output_stream = new ofstream(section_output_filename);
 				print_header();
 
 				for(unsigned long j = global_index_start; j <= global_index_finish; j++) {
@@ -1364,6 +1371,9 @@ void Certificate::print_der() {
 				// Print footer and close the file for block number
 				print_footer();
 				output_stream->close();
+
+				// Dispatches the work to the execution manager
+				dispatch(section_output_filename, 0);
 			}
 		},
 		core);
@@ -1469,7 +1479,9 @@ void Certificate::print_der() {
 #ifdef PARALLEL
 	threads.emplace_back([&, this] {
 		// Open the file for SOL and print header
-		output_stream = new ofstream(output_filename + ".DER-solcheck");
+		string section_output_filename = output_filename + ".DER-solcheck";
+		
+		output_stream = new ofstream(section_output_filename);
 		print_header();
 
 		task_der_part2();
@@ -1477,6 +1489,9 @@ void Certificate::print_der() {
 		// Print footer and close the file for block number
 		print_footer();
 		output_stream->close();
+
+		// Dispatches the work to the execution manager
+		dispatch(section_output_filename, 0);
 	});
 #else
 	task_der_part2();
@@ -1506,6 +1521,8 @@ void Certificate::print_formula(string output_filename, unsigned long block_size
 	for(auto &thread : threads) {
 		thread.join();
 	}
+#else
+	dispatch(output_filename, 0);
 #endif /* PARALLEL */
 }
 
@@ -1560,5 +1577,33 @@ void Certificate::print() {
 	fprintf(stdout, "Derivations: \n");
 	for(auto &derivation: derivations) {
 		fprintf(stdout, "%s\n", derivation.get_string(constraints).c_str());
+	}
+}
+
+void Certificate::dispatch(string filename, unsigned long line) {
+	remote_execution_manager.dispatch(filename, line);
+
+	// Collect all dispatches that are ready
+	// If one of them returned false, we get notified.
+	RemoteExecutionManager::Dispatch *first_faulty_dispatch = nullptr;
+
+	if((first_faulty_dispatch = remote_execution_manager.collect_ready_dispatches()) != nullptr) {
+		fprintf(stderr, "Error in VIPR line %u\n", first_faulty_dispatch->line);
+		
+		exit(EXIT_FAILURE);
+	}
+}
+
+Certificate::Certificate() {
+}
+
+Certificate::~Certificate() {
+	// Clears all pending dispatches and leaves the program if one of them fails
+	RemoteExecutionManager::Dispatch *first_faulty_dispatch = nullptr;
+
+	if((first_faulty_dispatch = remote_execution_manager.clear_dispatches()) != nullptr) {
+		fprintf(stderr, "Error in VIPR line %u\n", first_faulty_dispatch->line);
+		
+		exit(EXIT_FAILURE);
 	}
 }

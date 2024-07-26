@@ -54,6 +54,9 @@ void RemoteExecutionManager::add_machine(T &&machine_name, uint numberSlots) {
 	@param line Line in the VIPR file to which the execution is related
 */
 void RemoteExecutionManager::dispatch(string old_filename, uint line) {
+	// Serialize concurrent calls to this method
+	std::lock_guard<std::mutex> lock(serializer);
+
 	// Find a machine to execute
 	int next_machine = -1;
 
@@ -102,7 +105,7 @@ void RemoteExecutionManager::dispatch(string old_filename, uint line) {
 	// and fill up the dispatch result with the outcome
 	remote_dispatch_results.emplace_back(
 		std::move(async(std::launch::async, [this, dispatch] {
-			string ssh_command = "ssh " + dispatch->machine->name + " <working directory>/local_runner.sh " + dispatch->filename;
+			string ssh_command = "ssh " + dispatch->machine->name + " ~/Documents/davidson/summer24/vipr_parser/local_runner.sh " + dispatch->filename;
 
 			string output = run_local(ssh_command);
 
@@ -161,6 +164,9 @@ string RemoteExecutionManager::run_local(T &&command) {
 	@return A pointer to a faulty dispatch, if one is collected; or a null pointer otherwise.
 */
 RemoteExecutionManager::Dispatch *RemoteExecutionManager::collect_ready_dispatches(RemoteExecutionManager::WaitMode waitMode) {
+	// Serialize concurrent calls to this method
+	std::lock_guard<std::mutex> lock(serializer);
+
 	while(true) {
 		bool foundDispatches = false;
 
@@ -204,6 +210,9 @@ RemoteExecutionManager::Dispatch *RemoteExecutionManager::collect_ready_dispatch
 	Waits until all previous dispatches were successful.
 */
 RemoteExecutionManager::Dispatch *RemoteExecutionManager::clear_dispatches() {
+	// Serialize concurrent calls to this method
+	std::lock_guard<std::mutex> lock(serializer);
+
 	for(uint i = 0; i < remote_dispatches.size(); i++) {
 		if(!remote_dispatches[i]) {
 			continue;
