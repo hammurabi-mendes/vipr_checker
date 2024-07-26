@@ -1,5 +1,5 @@
 vipr_checker
 *.o
 *.vipr
-*.smt
+*.smt*
 cvc5*

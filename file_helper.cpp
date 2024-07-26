@@ -24,7 +24,7 @@ void FileHelper::close_input() {
 }
 
 int FileHelper::open_output(const char *filename) {
-	output_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND, 0x644);
+	output_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND | 0644, 0644);
 
 	if(output_fd == -1) {
 		throw runtime_error(format("Error opening {}\n", filename));

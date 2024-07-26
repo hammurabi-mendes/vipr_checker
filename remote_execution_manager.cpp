@@ -5,8 +5,14 @@
 #include <thread>
 #include <unistd.h>
 
+#include <stdexcept>
+#include <format>
+
 using std::async;
 using std::future;
+
+using std::runtime_error;
+using std::format;
 
 /**
 	Default constructor: adds a list of default machines into the machine dataset.
@@ -85,20 +91,9 @@ int RemoteExecutionManager::find_machine() {
 */
 void RemoteExecutionManager::dispatch(string filename, uint line) {
 	// Serialize concurrent calls to this method
-	std::lock_guard<std::mutex> lock(serializer);
+	std::lock_guard<std::recursive_mutex> lock(serializer);
 
-	// Find a machine to execute
-	int next_machine = find_machine();
-
-	if(next_machine == -1) {
-		delayed_dispatches.emplace_back(new Dispatch(nullptr, filename, line));
-		return;
-	}
-
-	// Create the dispatch to the available machine
-	Dispatch *next_dispatch = new Dispatch(remote_machines[next_machine], filename, line);
-
-	dispatch(next_dispatch);
+	delayed_dispatches.emplace_back(new Dispatch(nullptr, filename, line));
 }
 
 /**
@@ -108,26 +103,38 @@ void RemoteExecutionManager::dispatch(string filename, uint line) {
 	@param dispatch Dispatch to send to the remote machine
 */
 void RemoteExecutionManager::dispatch(Dispatch *dispatch) {
+	// Serialize concurrent calls to this method
+	std::lock_guard<std::recursive_mutex> lock(serializer);
+
 	remote_dispatches.push_back(dispatch);
 
 	// Launch a separate thread that will run the task remotely, collect the result
 	// and fill up the dispatch result with the outcome
 	remote_dispatch_results.emplace_back(
 		std::move(async(std::launch::async, [this, dispatch] {
-			string ssh_command = "ssh " + dispatch->machine->name + " <working_directory>/local_runner.sh " + dispatch->filename;
+			char *command_line1[] = {
+				"ssh",
+				(char *) dispatch->machine->name.c_str(),
+				"<working_directory>/local_runner.sh",
+				(char *) dispatch->filename.c_str(),
+				nullptr
+			};
 
-			string output = run_local(ssh_command);
+			run_local(command_line1, &dispatch->pid, &dispatch->exit_value);
 
-			run_local(string("rm -f " + dispatch->filename));
+			char *command_line2[] = {
+				"rm",
+				"-f",
+				(char *) dispatch->filename.c_str(),
+				nullptr
+			};
+
+			run_local(command_line2, nullptr, nullptr);
 
 			// Synchronized write to the variable
 			dispatch->machine->numberSlots.fetch_add(1);
 
-			if(output != "sat\n") {
-				return false;
-			}
-
-			return true;
+			return (dispatch->exit_value == 1 ? true : false);
 		}))
 	);
 
@@ -139,24 +146,44 @@ void RemoteExecutionManager::dispatch(Dispatch *dispatch) {
 	Individual lines bigger than 1K characters are truncated.
 
 	@param command The command to be run locally under /bin/sh
-
-	@return The output of the command.
+	@param pid If different than nullptr, fill up with the process PID
+	@param exit_value If different than nullptr fill up with the process exit value
 */
-string RemoteExecutionManager::run_local(string command) {
+void RemoteExecutionManager::run_local(char *const command_line[], pid_t *pid, int *exit_value) {
 	FILE *output_stream;
 	char output_line[1024];
 
-	string output_contents;
+	int child_pid = fork();
 
-	if((output_stream = popen(command.c_str(), "r")) != NULL) {
-		while(fgets(output_line, sizeof(output_line), output_stream) != NULL) {
-			output_contents.append(std::string(output_line));
-		}
+	// If there's an error forking, kill all previous dispatches and exit the program
+	if(child_pid == -1) {
+		kill_dispatches();
+
+		throw runtime_error("Error forking child process");
 	}
 
-	pclose(output_stream);
+	// Child process goes here
+	if(child_pid == 0) {
+		execvp(command_line[0], command_line);
 
-	return output_contents;
+		// Never reached
+		exit(EXIT_SUCCESS);
+	}
+
+	// Parent process goes here
+	if(pid != nullptr) {
+		*pid = child_pid;
+	}
+
+	if(exit_value != nullptr) {
+		// Waits until the child process terminates
+		int status;
+
+		waitpid(child_pid, &status, 0);
+
+		// Collects the exit status
+		*exit_value = WEXITSTATUS(status);
+	}
 }
 
 /**
@@ -164,50 +191,71 @@ string RemoteExecutionManager::run_local(string command) {
 */
 RemoteExecutionManager::ClearingResult RemoteExecutionManager::clear_dispatches() {
 	// Serialize concurrent calls to this method
-	std::lock_guard<std::mutex> lock(serializer);
+	std::lock_guard<std::recursive_mutex> lock(serializer);
 
-	while(true) {
-		bool restart = false;
+	while(delayed_dispatches.size() != 0) {
+		int next_machine = find_machine();
 
-		for(uint i = 0; i < remote_dispatches.size(); i++) {
-			if(!remote_dispatches[i]) {
-				continue;
-			}
-
-			bool success = remote_dispatch_results[i].get();
-
-			// If we just completed one dispatch and we have queued dispatches,
-			// schedule them right now
-			if(delayed_dispatches.size() != 0) {
-				Machine *old_machine = remote_dispatches[i]->machine;
-
-				Dispatch *new_dispatch = delayed_dispatches.back();
-				delayed_dispatches.pop_back();
-
-				new_dispatch->machine = old_machine;
-				dispatch(new_dispatch);
-
-				// UGH, but I'm in a hurry
-				restart = true;
-				break;
-			}
-
-			// Clean the old dispatch information
-			remote_dispatches[i] = nullptr;
-			delete remote_dispatches[i];
-
-			if(success) {
-				return ClearingResult::Sat;
-			}
-			else {
-				return ClearingResult::Unsat;
-			}
+		if(next_machine == -1) {
+			break;
 		}
 
-		if(!restart) {
-			break;
+		Dispatch *new_dispatch = delayed_dispatches.back();
+		delayed_dispatches.pop_back();
+
+		new_dispatch->machine = remote_machines[next_machine];
+		dispatch(new_dispatch);
+	}
+
+	for(uint i = 0; i < remote_dispatches.size(); i++) {
+		if(!remote_dispatches[i]) {
+			continue;
+		}
+
+		bool success = remote_dispatch_results[i].get();
+
+		// If we just completed one dispatch and we have queued dispatches,
+		// schedule them right now
+		if(delayed_dispatches.size() != 0) {
+			Dispatch *new_dispatch = delayed_dispatches.back();
+			delayed_dispatches.pop_back();
+
+			new_dispatch->machine = remote_dispatches[i]->machine;
+			dispatch(new_dispatch);
+		}
+
+		// Clean the old dispatch information
+		delete remote_dispatches[i];
+
+		remote_dispatches[i] = nullptr;
+
+		if(success) {
+			return ClearingResult::Sat;
+		}
+		else {
+			return ClearingResult::Unsat;
 		}
 	}
 
 	return ClearingResult::Done;
+}
+
+/**
+	Waits until all previous dispatches were successful.
+*/
+void RemoteExecutionManager::kill_dispatches() {
+	// Serialize concurrent calls to this method
+	std::lock_guard<std::recursive_mutex> lock(serializer);
+
+	for(uint i = 0; i < remote_dispatches.size(); i++) {
+		if(!remote_dispatches[i]) {
+			continue;
+		}
+
+		string pid_string = std::to_string(remote_dispatches[i]->pid);
+
+		char *command_line[] = { "kill", "-9", (char *) pid_string.c_str(), nullptr };
+
+		run_local(command_line, nullptr, nullptr);
+	}
 }

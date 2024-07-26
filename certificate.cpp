@@ -1510,6 +1510,10 @@ void Certificate::setup_output(string output_filename, bool expected_sat, unsign
 }
 
 void Certificate::print_formula() {
+#ifdef PARALLEL
+	std::atomic_thread_fence(std::memory_order_release);
+#endif /* PARALLEL */
+
 #ifndef PARALLEL
 	// Open the single output file and print header
 	open_output(output_filename);

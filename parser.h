@@ -20,7 +20,7 @@ using std::format;
 using std::runtime_error;
 
 class Parser {
-	static constexpr long BUFFER_SIZE = 16384;
+	constexpr static long BUFFER_SIZE = 16384;
 
 	// File descriptor
 	int fd;

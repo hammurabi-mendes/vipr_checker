@@ -21,7 +21,7 @@ using std::string;
 using std::atomic_uint;
 using std::future;
 
-using std::mutex;
+using std::recursive_mutex;
 
 class RemoteExecutionManager {
 public:
@@ -38,6 +38,8 @@ public:
 		Machine *machine;
 		string filename;
 		uint line;
+		pid_t pid;
+		int exit_value;
 	};
 
 	enum WaitMode {
@@ -60,21 +62,23 @@ private:
 
 	uint search_offset;
 
-	mutex serializer;
+	recursive_mutex serializer;
 
 public:
 	RemoteExecutionManager();
 	virtual ~RemoteExecutionManager();
 
+	void dispatch(string filename, uint line);
+
+	ClearingResult clear_dispatches();
+	void kill_dispatches();
+
+private:
 	void add_machine(string machine_name, uint numberSlots);
 	int find_machine();
 
-	void dispatch(string filename, uint line);
 	void dispatch(Dispatch *dispatch);
-
-	string run_local(string command);
-
-	ClearingResult clear_dispatches();
+	void run_local(char *const command_line[], pid_t *pid, int *exit_value);
 };
 
 #endif /* REMOTE_EXECUTION_MANAGER_H */

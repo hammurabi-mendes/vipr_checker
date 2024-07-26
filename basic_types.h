@@ -12,12 +12,11 @@ struct Number {
 	bool is_integral;
 	bool is_positive_infinity;
 	bool is_negative_infinity;
-	bool is_nan;
 
-	Number(): numerator{"0"}, denominator{"1"}, is_integral{true} {}
+	Number(): numerator{"0"}, denominator{"1"}, is_integral{true}, is_positive_infinity{false}, is_negative_infinity{false} {}
 
-	Number(char *integral): numerator{integral}, denominator{"1"}, is_integral(true) {}
-	Number(char *numerator, char *denominator): numerator{numerator}, denominator{denominator}, is_integral(false) {}
+	Number(char *integral): numerator{integral}, denominator{"1"}, is_integral(true), is_positive_infinity{false}, is_negative_infinity{false} {}
+	Number(char *numerator, char *denominator): numerator{numerator}, denominator{denominator}, is_integral(false), is_positive_infinity{false}, is_negative_infinity{false} {}
 
 	inline string get_string() noexcept {
 		if(is_integral) {

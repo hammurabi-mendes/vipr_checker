@@ -4,9 +4,15 @@ if [ "$#" -lt 1 ]; then
 	echo "File not provided"
 fi
 
-CVC=$<cvc5 bin directory>
-DIRNAME=<working directory>
+CVC=<cvc_path>
+DIRNAME=<working_directory>
 
 cd $DIRNAME
 
-$CVC $DIRNAME/$1
+OUTPUT=$($CVC $1)
+
+if [ "$OUTPUT" = "sat" ]; then
+    exit 1
+else
+    exit 0
+fi
