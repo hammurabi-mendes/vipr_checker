@@ -42,8 +42,7 @@ RemoteExecutionManager::~RemoteExecutionManager() {
 	@param machine Hostname to insert in the machine dataset
 	@param numberSlots Number of slots of execution that can be fulfilled with tasks within the machine
 */
-template<class T = string>
-void RemoteExecutionManager::add_machine(T &&machine_name, uint numberSlots) {
+void RemoteExecutionManager::add_machine(string machine_name, uint numberSlots) {
 	remote_machines.push_back(new Machine(machine_name, numberSlots));
 }
 
@@ -105,7 +104,7 @@ void RemoteExecutionManager::dispatch(string old_filename, uint line) {
 	// and fill up the dispatch result with the outcome
 	remote_dispatch_results.emplace_back(
 		std::move(async(std::launch::async, [this, dispatch] {
-			string ssh_command = "ssh " + dispatch->machine->name + " ~/Documents/davidson/summer24/vipr_parser/local_runner.sh " + dispatch->filename;
+			string ssh_command = "ssh " + dispatch->machine->name + " <working directory>/local_runner.sh " + dispatch->filename;
 
 			string output = run_local(ssh_command);
 
@@ -133,8 +132,7 @@ void RemoteExecutionManager::dispatch(string old_filename, uint line) {
 
 	@return The output of the command.
 */
-template<class T = string>
-string RemoteExecutionManager::run_local(T &&command) {
+string RemoteExecutionManager::run_local(string command) {
 	FILE *output_stream;
 	char output_line[1024];
 

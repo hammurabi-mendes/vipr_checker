@@ -59,12 +59,10 @@ public:
 	RemoteExecutionManager();
 	virtual ~RemoteExecutionManager();
 
-	template<class T = string>
-	void add_machine(T &&machine, uint numberSlots);
+	void add_machine(string machine_name, uint numberSlots);
 	void dispatch(string command, uint line);
 
-	template<class T = string>
-	string run_local(T &&command);
+	string run_local(string command);
 
 	Dispatch *collect_ready_dispatches(WaitMode waitMode = WaitMode::NoWait);
 	Dispatch *clear_dispatches();

@@ -11,11 +11,11 @@ FLAGS=-DPARALLEL
 LDFLAGS=
 
 PROGRAMS=vipr_checker
-OBJECTS=main.o parser.o certificate.o
+OBJECTS=main.o parser.o certificate.o remote_execution_manager.o
 
 all: $(PROGRAMS)
 
-vipr_checker: main.o parser.o certificate.o
+vipr_checker: main.o parser.o certificate.o remote_execution_manager.o
 	$(CXX) $(CXXFLAGS) $(FLAGS) -o $@ $(OBJECTS) $(LDFLAGS)
 
 %.o: %.cpp
