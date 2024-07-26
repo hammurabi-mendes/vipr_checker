@@ -4,17 +4,7 @@
 #include "parser.h"
 
 Parser::Parser(char *filename): line{nullptr}, token{nullptr}, eof{false} {
-    fd = open(filename, O_RDONLY);
-
-    if(fd == -1) {
-        throw runtime_error("Error building parser");
-	}
-
-#ifdef LINUX
-    if(!posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
-        perror("Error advising for sequential access (proceeding anyway)");
-    }
-#endif /* LINUX */
+    fd = file_helper.open_input(filename);
 
     buffer.resize(BUFFER_SIZE + 1);
     buffer[0] = '\0';
@@ -28,5 +18,5 @@ Parser::Parser(char *filename): line{nullptr}, token{nullptr}, eof{false} {
 }
 
 Parser::~Parser() {
-    close(fd);
+    file_helper.close_input();
 }

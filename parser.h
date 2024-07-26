@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include "basic_types.h"
+#include "file_helper.h"
 #include "LinearAllocator.hpp"
 
 using std::string;
@@ -44,6 +45,9 @@ class Parser {
 
 	// Allocates all permanent strings in a linear buffer, reducing calls to malloc()
 	LinearAllocator<char> linear_allocator;
+
+	// File helper that provides some useful input/output functions
+	FileHelper file_helper;
 
 public:
 	Parser(char *filename);

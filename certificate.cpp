@@ -1,17 +1,14 @@
 #include "certificate.h"
 
+#include "file_helper.h"
+
 #include <stdexcept>
 #include <format>
-
-#include <fstream>
-#include <iostream>
 
 using std::string;
 
 using std::runtime_error;
 using std::format;
-
-using std::ofstream;
 
 //////////////////////////
 // Operator definitions //
@@ -157,10 +154,18 @@ void Certificate::calculate_dependencies() {
 // Space for the 64-bit decimal digits
 constexpr size_t BUFFER_LONG_STRING_SIZE = 32;
 
-thread_local ofstream *output_stream = nullptr;
+thread_local FileHelper file_helper;
+
+inline void open_output(string filename) {
+	file_helper.open_output(filename.c_str());
+}
 
 inline void write_output(const char *message) {
-	(*output_stream) << message;
+	file_helper.write_output(message);
+}
+
+inline void close_output() {
+	file_helper.close_output();
 }
 
 inline void print_bool(bool variable) {
@@ -561,14 +566,14 @@ void Certificate::print_sol() {
 		// Open the file for SOL and print header
 		string section_output_filename = output_filename + ".SOL";
 
-		output_stream = new ofstream(section_output_filename);
+		open_output(section_output_filename);
 		print_header();
 
 		task_print_sol();
 
 		// Print footer and close the file for block number
 		print_footer();
-		output_stream->close();
+		close_output();
 
 		// Dispatches the work to the execution manager
 		remote_execution_manager.dispatch(section_output_filename, 0);
@@ -1361,7 +1366,7 @@ void Certificate::print_der() {
 				// Open the file for block number and print header
 				string section_output_filename = output_filename + ".DER-" + std::to_string(global_index_start - number_problem_constraints + 1) + "-" + std::to_string(global_index_finish - number_problem_constraints + 1);
 				
-				output_stream = new ofstream(section_output_filename);
+				open_output(section_output_filename);
 				print_header();
 
 				for(unsigned long j = global_index_start; j <= global_index_finish; j++) {
@@ -1370,7 +1375,7 @@ void Certificate::print_der() {
 
 				// Print footer and close the file for block number
 				print_footer();
-				output_stream->close();
+				close_output();
 
 				// Dispatches the work to the execution manager
 				remote_execution_manager.dispatch(section_output_filename, 0);
@@ -1481,14 +1486,14 @@ void Certificate::print_der() {
 		// Open the file for SOL and print header
 		string section_output_filename = output_filename + ".DER-solcheck";
 		
-		output_stream = new ofstream(section_output_filename);
+		open_output(section_output_filename);
 		print_header();
 
 		task_der_part2();
 
 		// Print footer and close the file for block number
 		print_footer();
-		output_stream->close();
+		close_output();
 
 		// Dispatches the work to the execution manager
 		remote_execution_manager.dispatch(section_output_filename, 0);
@@ -1507,7 +1512,7 @@ void Certificate::setup_output(string output_filename, bool expected_sat, unsign
 void Certificate::print_formula() {
 #ifndef PARALLEL
 	// Open the single output file and print header
-	output_stream = new ofstream(output_filename);
+	open_output(output_filename);
 	print_header();	
 #endif /* !PARALLEL */
 
@@ -1517,7 +1522,7 @@ void Certificate::print_formula() {
 #ifndef PARALLEL
 	// Print footer and close the single output file
 	print_footer();	
-	output_stream->close();
+	close_output();
 #endif /* !PARALLEL */
 
 #ifdef PARALLEL
