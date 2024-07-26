@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <format>
 
+#include <fstream>
 #include <iostream>
 
 using std::string;
@@ -10,7 +11,7 @@ using std::string;
 using std::runtime_error;
 using std::format;
 
-using std::cout;
+using std::ofstream;
 
 //////////////////////////
 // Operator definitions //
@@ -156,8 +157,10 @@ void Certificate::calculate_dependencies() {
 // Space for the 64-bit decimal digits
 constexpr size_t BUFFER_LONG_STRING_SIZE = 32;
 
+thread_local ofstream *output_stream = nullptr;
+
 inline void write_output(const char *message) {
-	cout << message;
+	(*output_stream) << message;
 }
 
 inline void print_bool(bool variable) {
@@ -165,7 +168,7 @@ inline void print_bool(bool variable) {
 }
 
 inline void print_unsigned_long(unsigned long variable) {
-	static char buffer[BUFFER_LONG_STRING_SIZE];
+	char buffer[BUFFER_LONG_STRING_SIZE];
 
 	snprintf(buffer, BUFFER_LONG_STRING_SIZE, "%lu", variable);
 	write_output(buffer);
@@ -333,6 +336,21 @@ inline void print_s(Direction direction) {
 			print_integral_string("1");
 			break;
 	}
+}
+
+///////////////////////////
+// Print header & footer //
+///////////////////////////
+
+void print_header() {
+    write_output("(set-info :smt-lib-version 2.6)\n");
+    write_output("(set-logic AUFLIRA)\n");
+    write_output("(set-info :source \"Transformed from a VIPR certificate\")\n");
+    write_output("; --- END HEADER --- \n\n");
+}
+
+void print_footer() {
+    write_output("(check-sat)\n");
 }
 
 /////////////////////////////
@@ -519,20 +537,40 @@ void Certificate::print_plbimplication() {
 }
 
 void Certificate::print_sol() {
-	print_op1<OP_ASSERT>(LAMBDA(
-		print_ifelse(
-			LAMBDA(print_op1<OP_NOT>(feasible)),
-			LAMBDA(print_op2<OP_EQ>(number_solutions, LITERAL(0))),
-			LAMBDA(print_op2<OP_AND>(
-				LAMBDA(print_feas()),
-				LAMBDA(print_ifelse(
-					minimization,
-					LAMBDA(print_pubimplication()),
-					LAMBDA(print_plbimplication())
+	auto task_print_sol = [&, this] {
+		write_output("; Begin SOL\n");
+
+		print_op1<OP_ASSERT>(LAMBDA(
+			print_ifelse(
+				LAMBDA(print_op1<OP_NOT>(feasible)),
+				LAMBDA(print_op2<OP_EQ>(number_solutions, LITERAL(0))),
+				LAMBDA(print_op2<OP_AND>(
+					LAMBDA(print_feas()),
+					LAMBDA(print_ifelse(
+						minimization,
+						LAMBDA(print_pubimplication()),
+						LAMBDA(print_plbimplication())
+					))
 				))
-			))
-		)
-	));
+			)
+		));
+	};
+
+#ifdef PARALLEL
+	threads.emplace_back([&, this] {
+		// Open the file for SOL and print header
+		output_stream = new ofstream(output_filename + ".SOL");
+		print_header();
+
+		task_print_sol();
+
+		// Print footer and close the file for block number
+		print_footer();
+		output_stream->close();
+	});
+#else
+	task_print_sol();
+#endif /* PARALLEL */
 }
 
 bool Certificate::calculate_Aij(unsigned long i, unsigned long j) {
@@ -1284,132 +1322,191 @@ void Certificate::print_der_individual(unsigned long derivation_index, Derivatio
 }
 
 void Certificate::print_der() {
-	print_op1<OP_ASSERT>(LAMBDA(
-		print_op2<OP_AND>(
-			LAMBDA(
-				print_op1<OP_AND>(LAMBDA(
-					MIN_SET(2);
+	auto task_der_part1 = [&, this] (unsigned long j) {
+		Derivation &derivation = get_derivation_from_offset(j);
 
-					for(unsigned long i = number_problem_constraints; i < number_total_constraints; i++) {
-						Derivation &derivation = get_derivation_from_offset(i);
+		write_output("; DER for constraint ");
+		write_output(derivation.get_constraint(constraints).name);
+		write_output("\n");
 
-						print_der_individual(i, derivation);
+		print_op1<OP_ASSERT>(LAMBDA(
+			print_op1<OP_AND>(LAMBDA(
+				print_der_individual(j, derivation);
+			));
+		));
 
-						// Space between terms
-						write_output(" ");
-						MIN_COUNT;
-					}
+		// Lines between assertions
+		write_output("\n");
+	};
 
-					MIN_ENSURE_TRUE;
-				))
-			),
-			LAMBDA(
-				unsigned long last_constraint_index = number_total_constraints - 1;
-				Constraint &last_constraint = constraints[last_constraint_index];
+#ifdef PARALLEL
+	unsigned long number_blocks = std::ceil(static_cast<float>(number_derived_constraints) / block_size);
 
-				print_ifelse(
-					LAMBDA(print_op1<OP_NOT>(feasible)),
-					LAMBDA(print_op2<OP_AND>(
-						LAMBDA(print_DOM(
-							[&] (unsigned long j) {
-								print_number(last_constraint.coefficients[j]);
-							},
-							LAMBDA(print_s(last_constraint.direction)),
-							LAMBDA(print_number(last_constraint.target)),
-							[&] (unsigned long j) {
-								print_integral_string("0");
-							},
-							LAMBDA(print_s(Direction::GreaterEqual)),
-							LAMBDA(print_integral_string("1"))
-						)),
-						LAMBDA(
-							for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
-								if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
-									print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
-								}
-							}
-						)
+	unsigned long total_cores = std::min(static_cast<unsigned long>(std::thread::hardware_concurrency()), number_blocks);
+
+	fprintf(stderr, "Running DER generation with %lu parallel cores and block size %lu\n", total_cores, block_size);
+
+	for(unsigned long core = 0; core < total_cores; core++) {
+		threads.emplace_back([&, this] (unsigned long core) {
+			for(unsigned long derived_index = (core * block_size); derived_index < number_derived_constraints; derived_index += (total_cores * block_size)) {
+				// Calculate global indexes
+				unsigned long global_index_start = derived_index + number_problem_constraints;
+				unsigned long global_index_finish = std::min(global_index_start + block_size, number_total_constraints) - 1;
+
+				// Open the file for block number and print header
+				output_stream = new ofstream(output_filename + ".DER-" + std::to_string(global_index_start - number_problem_constraints + 1) + "-" + std::to_string(global_index_finish - number_problem_constraints + 1));
+				print_header();
+
+				for(unsigned long j = global_index_start; j <= global_index_finish; j++) {
+					task_der_part1(j);
+				}
+
+				// Print footer and close the file for block number
+				print_footer();
+				output_stream->close();
+			}
+		},
+		core);
+	}
+#else
+	for(unsigned long i = number_problem_constraints; i < number_total_constraints; i++) {
+		task_der_part1(i);
+	}
+#endif /* PARALLEL */
+
+	auto task_der_part2 = [&, this] {
+		write_output("; Begin DER (solution check)\n");
+
+		print_op1<OP_ASSERT>(LAMBDA(
+			unsigned long last_constraint_index = number_total_constraints - 1;
+			Constraint &last_constraint = constraints[last_constraint_index];
+
+			print_ifelse(
+				LAMBDA(print_op1<OP_NOT>(feasible)),
+				LAMBDA(print_op2<OP_AND>(
+					LAMBDA(print_DOM(
+						[&] (unsigned long j) {
+							print_number(last_constraint.coefficients[j]);
+						},
+						LAMBDA(print_s(last_constraint.direction)),
+						LAMBDA(print_number(last_constraint.target)),
+						[&] (unsigned long j) {
+							print_integral_string("0");
+						},
+						LAMBDA(print_s(Direction::GreaterEqual)),
+						LAMBDA(print_integral_string("1"))
 					)),
-					LAMBDA(print_op2<OP_AND>(
-						LAMBDA(print_op2<OP_IMPLICATION>(
-							LAMBDA(print_op2<OP_AND>(
-								minimization,
-								LAMBDA(print_plb())
-							)),
-							LAMBDA(print_op2<OP_AND>(
-								LAMBDA(print_DOM(
-									[&] (unsigned long j) {
-										print_number(last_constraint.coefficients[j]);
-									},
-									LAMBDA(print_s(last_constraint.direction)),
-									LAMBDA(print_number(last_constraint.target)),
-									[&] (unsigned long j) {
-										print_number(objective_coefficients[j]);
-									},
-									LAMBDA(print_s(Direction::GreaterEqual)),
-									LAMBDA(print_number(get_L()))
-								)),
-								LAMBDA(
-									for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
-										if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
-											print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
-										}
-									}
-								)
-							))
+					LAMBDA(
+						for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+							if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+								print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
+							}
+						}
+					)
+				)),
+				LAMBDA(print_op2<OP_AND>(
+					LAMBDA(print_op2<OP_IMPLICATION>(
+						LAMBDA(print_op2<OP_AND>(
+							minimization,
+							LAMBDA(print_plb())
 						)),
-						LAMBDA(print_op2<OP_IMPLICATION>(
-							LAMBDA(print_op2<OP_AND>(
-								LAMBDA(print_op1<OP_NOT>(
-									minimization
-								)),
-								LAMBDA(print_pub())
+						LAMBDA(print_op2<OP_AND>(
+							LAMBDA(print_DOM(
+								[&] (unsigned long j) {
+									print_number(last_constraint.coefficients[j]);
+								},
+								LAMBDA(print_s(last_constraint.direction)),
+								LAMBDA(print_number(last_constraint.target)),
+								[&] (unsigned long j) {
+									print_number(objective_coefficients[j]);
+								},
+								LAMBDA(print_s(Direction::GreaterEqual)),
+								LAMBDA(print_number(get_L()))
 							)),
-							LAMBDA(print_op2<OP_AND>(
-								LAMBDA(print_DOM(
-									[&] (unsigned long j) {
-										print_number(last_constraint.coefficients[j]);
-									},
-									LAMBDA(print_s(last_constraint.direction)),
-									LAMBDA(print_number(last_constraint.target)),
-									[&] (unsigned long j) {
-										print_number(objective_coefficients[j]);
-									},
-									LAMBDA(print_s(Direction::SmallerEqual)),
-									LAMBDA(print_number(get_U()))
-								)),
-								LAMBDA(
-									for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
-										if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
-											print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
-										}
+							LAMBDA(
+								for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+									if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+										print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
 									}
-								)
-							))
+								}
+							)
+						))
+					)),
+					LAMBDA(print_op2<OP_IMPLICATION>(
+						LAMBDA(print_op2<OP_AND>(
+							LAMBDA(print_op1<OP_NOT>(
+								minimization
+							)),
+							LAMBDA(print_pub())
+						)),
+						LAMBDA(print_op2<OP_AND>(
+							LAMBDA(print_DOM(
+								[&] (unsigned long j) {
+									print_number(last_constraint.coefficients[j]);
+								},
+								LAMBDA(print_s(last_constraint.direction)),
+								LAMBDA(print_number(last_constraint.target)),
+								[&] (unsigned long j) {
+									print_number(objective_coefficients[j]);
+								},
+								LAMBDA(print_s(Direction::SmallerEqual)),
+								LAMBDA(print_number(get_U()))
+							)),
+							LAMBDA(
+								for(unsigned long j = number_problem_constraints; j < number_total_constraints; j++) {
+									if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+										print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(last_constraint_index, j))));
+									}
+								}
+							)
 						))
 					))
-				)
+				))
 			)
-		)
-	));
+		));
+	};
+
+#ifdef PARALLEL
+	threads.emplace_back([&, this] {
+		// Open the file for SOL and print header
+		output_stream = new ofstream(output_filename + ".DER-solcheck");
+		print_header();
+
+		task_der_part2();
+
+		// Print footer and close the file for block number
+		print_footer();
+		output_stream->close();
+	});
+#else
+	task_der_part2();
+#endif /* PARALLEL */
 }
 
-void print_header() {
-    write_output("(set-info :smt-lib-version 2.6)\n");
-    write_output("(set-logic AUFLIRA)\n");
-    write_output("(set-info :source \"Transformed from a VIPR certificate\")\n");
-    write_output("; --- END HEADER --- \n\n");
-}
+void Certificate::print_formula(string output_filename, unsigned long block_size) {
+	this->output_filename = output_filename;
+	this->block_size = block_size;
 
-void print_footer() {
-    write_output("(check-sat)\n");
-}
-
-void Certificate::print_formula() {
+#ifndef PARALLEL
+	// Open the single output file and print header
+	output_stream = new ofstream(output_filename);
 	print_header();	
+#endif /* !PARALLEL */
+
 	print_sol();
 	print_der();
+
+#ifndef PARALLEL
+	// Print footer and close the single output file
 	print_footer();	
+	output_stream->close();
+#endif /* !PARALLEL */
+
+#ifdef PARALLEL
+	for(auto &thread : threads) {
+		thread.join();
+	}
+#endif /* PARALLEL */
 }
 
 ////////////////////////////////////

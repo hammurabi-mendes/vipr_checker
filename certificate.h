@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include <functional>
+#include <thread>
 
 #include "basic_types.h"
 
@@ -15,6 +16,7 @@ using std::vector;
 using std::unordered_set;
 
 using std::function;
+using std::thread;
 
 // Used in Certificate::print()
 string get_string_numbers(vector<Number> &coefficients);
@@ -202,8 +204,19 @@ struct Certificate {
 
 	vector<unordered_set<unsigned long> *> dependencies;
 
+	/////////////////////
+	// Output settings //
+	/////////////////////
+
+#ifdef PARALLEL
+	vector<thread> threads;
+#endif /* PARALLEL */
+
+	string output_filename; 
+	unsigned long block_size;
+
 	void precompute();
-	void print_formula();
+	void print_formula(string output_filename, unsigned long block_size);
 
 	void print();
 

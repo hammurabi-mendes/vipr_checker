@@ -137,12 +137,20 @@ inline Reason read_reason(Parser &parser) {
 }
 
 int main(int argc, char **argv) {
-	// Checks if the VIPR certificate file was provided
+	// Checks if the correct parameters were provided
 
-	if(argc < 2) {
-		fprintf(stderr, "usage: %s <vipr_certificate_file>\n", argv[0]);
+	if(argc < 3) {
+		fprintf(stderr, "usage: %s <vipr_certificate_in> <vipr_certificate_out> [block_size]\n", argv[0]);
 
 		return EXIT_FAILURE;
+	}
+
+	char *output_filename = argv[2];
+
+	unsigned long block_size = 0;
+
+	if(argc >= 4) {
+		block_size = atoi(argv[3]);
 	}
 
 	// Creates the parser object that will return lines and tokens
@@ -286,8 +294,12 @@ int main(int argc, char **argv) {
 		}
     }
 
+	if(block_size <= 0 || block_size >= certificate.number_derived_constraints) {
+		block_size = certificate.number_derived_constraints;
+	}
+
 	certificate.precompute();
-	certificate.print_formula();
+	certificate.print_formula(output_filename, block_size);
 
 	return EXIT_SUCCESS;
 }

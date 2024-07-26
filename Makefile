@@ -6,7 +6,8 @@ else
 	CXXFLAGS=-std=c++20 -I. -O3 -march=native -fno-strict-aliasing -flto -pthread
 endif
 
-FLAGS=
+# Add or remove -DPARALLEL to generate/process SMT files in parallel
+FLAGS=-DPARALLEL
 LDFLAGS=
 
 PROGRAMS=vipr_checker

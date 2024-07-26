@@ -9,7 +9,7 @@
 			"type": "cppdbg",
 			"request": "launch",
 			"program": "${workspaceFolder}/vipr_checker",
-			"args": [ "dano3_3.vipr" ],
+			"args": [ "dano3_3.vipr dano3_3.smt 2" ],
 			"stopAtEntry": false,
 			"cwd": "${fileDirname}",
 			"environment": [],
