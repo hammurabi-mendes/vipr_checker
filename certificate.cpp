@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <format>
 
+#include <cmath>
+
 using std::string;
 
 using std::runtime_error;
@@ -1197,9 +1199,9 @@ void Certificate::print_uns_individual(unsigned long derivation_index, Derivatio
 		write_output(" ");
 		print_DOM(constraints[derivation.reason.get_i2()], derivation.get_constraint(constraints));
 		write_output(" ");
-		print_bool(calculate_Aij(derivation.reason.get_i1(), derivation.reason.get_l1()));
+		print_op2<OP_G>(derivation_index, derivation.reason.get_l1());
 		write_output(" ");
-		print_bool(calculate_Aij(derivation.reason.get_i2(), derivation.reason.get_l2()));
+		print_op2<OP_G>(derivation_index, derivation.reason.get_l2());
 		write_output(" ");
 		print_DIS(constraints[derivation.reason.get_l1()], constraints[derivation.reason.get_l2()]);
 	));
@@ -1605,11 +1607,13 @@ bool Certificate::get_evaluation_result() {
 	while((result = remote_execution_manager.clear_dispatches()) != RemoteExecutionManager::ClearingResult::Done) {
 		if(result == RemoteExecutionManager::ClearingResult::Unsat && expected_sat == true) {
 			// Expected sat, did not get sat in all dispatches
+			remote_execution_manager.kill_dispatches();
 			return false;
 		}
 		
 		if(result == RemoteExecutionManager::ClearingResult::Unsat && expected_sat == false) {
 			// Expected unsat, did not get sat in all dispatches
+			remote_execution_manager.kill_dispatches();
 			return true;
 		}
 	}

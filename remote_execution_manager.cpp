@@ -4,6 +4,8 @@
 
 #include <thread>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include <stdexcept>
 #include <format>
@@ -30,6 +32,14 @@ RemoteExecutionManager::RemoteExecutionManager() {
 	to clear all dispatches before the deletion.
 */
 RemoteExecutionManager::~RemoteExecutionManager() {
+	for(uint i = 0; i < remote_dispatches.size(); i++) {
+		if(!remote_dispatches[i]) {
+			continue;
+		}
+
+		remote_dispatch_results[i].get();
+	}
+
 	for(auto *machine: remote_machines) {
 		delete machine;
 	}

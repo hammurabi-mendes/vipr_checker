@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "usage: %s <vipr_certificate_in> <vipr_certificate_out> <expected_answer> [block_size]\n", argv[0]);
 		fprintf(stderr, "\n");
 		fprintf(stderr, "<expected_answer> should be either \"sat\" or \"unsat\"\n");
-		fprintf(stderr, "[block_size] (optional): # derivations dispatched at once to the checker");
+		fprintf(stderr, "[block_size] (optional): # derivations dispatched at once to the checker\n");
 
 		return EXIT_FAILURE;
 	}

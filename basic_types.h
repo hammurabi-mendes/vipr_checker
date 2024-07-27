@@ -1,6 +1,8 @@
 #ifndef BASIC_TYPES_H
 #define BASIC_TYPES_H
 
+#include <string.h>
+
 using std::string;
 
 // TODO: Change constructors/destructors after I understand the permanence requirements

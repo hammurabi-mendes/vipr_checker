@@ -7,6 +7,7 @@
 #include <format>
 
 #include <string>
+#include <cstring>
 
 using std::runtime_error;
 using std::format;

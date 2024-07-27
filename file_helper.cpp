@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 
 #include "file_helper.h"
@@ -11,7 +13,7 @@ int FileHelper::open_input(const char *filename) {
 	}
 
 #ifdef LINUX
-    if(!posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
+    if(posix_fadvise(input_fd, 0, 0, POSIX_FADV_SEQUENTIAL) != 0) {
         perror("Error advising for sequential access (proceeding anyway)");
     }
 #endif /* LINUX */
@@ -24,7 +26,7 @@ void FileHelper::close_input() {
 }
 
 int FileHelper::open_output(const char *filename) {
-	output_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND | 0644, 0644);
+	output_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND, 0644);
 
 	if(output_fd == -1) {
 		throw runtime_error(format("Error opening {}\n", filename));
