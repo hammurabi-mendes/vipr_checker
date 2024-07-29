@@ -42,4 +42,4 @@ make
 Replace dano_3_3.vipr with whichever vipr file you want to check.
 Replace 50 with the block size of your choice. If you prefer the tool to decide the block size based on the hardware parallelism, make block size ``0''.
 
-**Note that the program will work only if you can access the machines specified in ``remote_execution_manager.cpp'' with ssh without a password, because that’s how we dispatch local and remote executions.**
+**Note that the program will work only if you can access the machines specified in ``remote_execution_manager.cpp`` with ssh without a password, because that’s how we dispatch local and remote executions.**
