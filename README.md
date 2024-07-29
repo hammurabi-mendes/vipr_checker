@@ -24,7 +24,7 @@ In addition, still in ``remote_execution_manager.cpp``, change ``localhost`` wit
 + add_machine(string("mymachineN"), 64);
 ```
 
-If you are not running under Linux, please remove the ``-DLINUX'' flag in the ``Makefile``.
+If you are not running under Linux, please remove the ``-DLINUX`` flag in the ``Makefile``.
 
 # After making changes, compile like this:
 
