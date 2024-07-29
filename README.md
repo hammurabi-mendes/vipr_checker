@@ -1,4 +1,4 @@
-# VIPR checker using Satistiability Modulo Theories Library (SMT-LIB)
+# VIPR certificate checking using Satistiability Modulo Theories
 
 # Before compiling:
 
