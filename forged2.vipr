@@ -1,0 +1,16 @@
+VER 1.0
+VAR 2
+x y
+INT 2
+0 1
+OBJ max
+2  0 1  1 1
+CON 4 4
+C1 L 1/2 1 0 1
+C2 L 1/2 1 1 1
+B1 G 1/3 1 0 1
+B2 G 1/3 1 1 1
+RTP range -inf 0
+SOL 0
+DER 0
+
