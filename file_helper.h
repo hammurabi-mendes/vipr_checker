@@ -16,7 +16,7 @@ using std::string;
 
 struct FileHelper {
 	// Space for output buffer
-	constexpr static size_t OUTPUT_BUFFER_LENGTH = 4096;
+	constexpr static size_t OUTPUT_BUFFER_LENGTH = 64 * 1024 * 1024;
 
 	int input_fd;
 	int output_fd;

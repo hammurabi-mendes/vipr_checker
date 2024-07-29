@@ -318,21 +318,33 @@ int main(int argc, char **argv) {
 		}
     }
 
-	if(block_size <= 0 || block_size >= certificate.number_derived_constraints) {
-		block_size = certificate.number_derived_constraints;
+	if(block_size == 0) {
+		block_size = std::max(1UL, certificate.number_derived_constraints / 192);
 	}
 
+	auto end_parsing = std::chrono::high_resolution_clock::now();
+
 	certificate.precompute();
+
+	auto end_precomputation = std::chrono::high_resolution_clock::now();
+
 	certificate.setup_output(output_filename, expected_sat, block_size);
+
 	certificate.print_formula();
 
-	// Keep track of the computation time
-	auto end_time = std::chrono::high_resolution_clock::now();
-	long long elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();
+	auto end_generation = std::chrono::high_resolution_clock::now();
 
 	bool result_ok = certificate.get_evaluation_result();
 
-	fprintf(stderr, "Results: %s|%s|%lld\n", input_filename, (result_ok ? "OK" : "ERR"), elapsed);
+	auto end_total = std::chrono::high_resolution_clock::now();
+
+	// Keep track of the computation time
+	double elapsed_parsing = std::chrono::duration<double>(end_parsing - begin_time).count();
+	double elapsed_precomputation = std::chrono::duration<double>(end_precomputation - begin_time).count();
+	double elapsed_generation = std::chrono::duration<double>(end_generation - begin_time).count();
+	double elapsed_total = std::chrono::duration<double>(end_total - begin_time).count();
+
+	fprintf(stderr, "Results: %s|%s|%ld|%.3lf|%.3lf|%.3lf|%.3lf\n", input_filename, (result_ok ? "OK" : "ERR"), block_size, elapsed_parsing, elapsed_precomputation, elapsed_generation, elapsed_total);
 
 	return EXIT_SUCCESS;
 }

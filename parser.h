@@ -107,13 +107,15 @@ public:
 			char *fraction_token = token;
 
 			char *numerator = strsep(&fraction_token, "/");
+			char *numerator_stable = get_stable_string(numerator);
 			char *denominator = strsep(&fraction_token, "/");
+			char *denominator_stable = get_stable_string(denominator);
 
 			if(fraction_token != nullptr) {
 				throw runtime_error(format("Error in line {}: leftover bytes in token ({})\n", line_number, fraction_token));
 			}
 
-			return Number(get_stable_string(numerator), get_stable_string(denominator));
+			return Number(numerator_stable, denominator_stable);
 		}
 	}
 

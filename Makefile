@@ -7,7 +7,7 @@ else
 endif
 
 # Add or remove -DPARALLEL to generate/process SMT files in parallel
-FLAGS=-DPARALLEL
+FLAGS=-DPARALLEL -DLINUX
 LDFLAGS=
 
 PROGRAMS=vipr_checker

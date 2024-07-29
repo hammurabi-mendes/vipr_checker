@@ -34,7 +34,9 @@ int FileHelper::open_output(const char *filename) {
 		exit(EXIT_FAILURE);
 	}
 
-	output_buffer = new char[FileHelper::OUTPUT_BUFFER_LENGTH];
+	if(output_buffer == nullptr) {
+		output_buffer = new char[FileHelper::OUTPUT_BUFFER_LENGTH];
+	}
 
 	return output_fd;
 }
@@ -42,11 +44,8 @@ int FileHelper::open_output(const char *filename) {
 void FileHelper::close_output() {
 	if(output_buffer != nullptr) {
 		flush_data(output_buffer, output_buffer_watermark);
-
-		delete output_buffer;	
 	}
 
-	output_buffer = nullptr;
 	output_buffer_watermark = 0;
 }
 	
@@ -54,4 +53,9 @@ FileHelper::FileHelper(): input_fd{-1}, output_fd{-1}, output_buffer{nullptr}, o
 }
 
 FileHelper::~FileHelper() {
+	if(output_buffer != nullptr) {
+		delete output_buffer;
+	}
+
+	output_buffer = nullptr;
 }

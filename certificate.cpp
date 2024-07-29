@@ -351,7 +351,7 @@ inline void print_s(Direction direction) {
 
 void print_header() {
     write_output("(set-info :smt-lib-version 2.6)\n");
-    write_output("(set-logic AUFLIRA)\n");
+    write_output("(set-logic QF_LIRA)\n");
     write_output("(set-info :source \"Transformed from a VIPR certificate\")\n");
     write_output("; --- END HEADER --- \n\n");
 }
@@ -1354,7 +1354,8 @@ void Certificate::print_der() {
 #ifdef PARALLEL
 	unsigned long number_blocks = std::ceil(static_cast<float>(number_derived_constraints) / block_size);
 
-	unsigned long total_cores = std::min(static_cast<unsigned long>(std::thread::hardware_concurrency()), number_blocks);
+	// Need to mulitply by two to account for hyperthreading
+	unsigned long total_cores = std::min(2 * static_cast<unsigned long>(std::thread::hardware_concurrency()), number_blocks);
 
 	fprintf(stderr, "Running DER generation with %lu parallel cores and block size %lu\n", total_cores, block_size);
 
