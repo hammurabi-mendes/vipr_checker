@@ -11,6 +11,8 @@ cd $DIRNAME
 
 OUTPUT=$($CVC $1)
 
+rm -f $1
+
 if [ "$OUTPUT" = "sat" ]; then
     exit 1
 else

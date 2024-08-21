@@ -132,15 +132,6 @@ void RemoteExecutionManager::dispatch(Dispatch *dispatch) {
 
 			run_local(command_line1, &dispatch->pid, &dispatch->exit_value);
 
-			char *command_line2[] = {
-				"rm",
-				"-f",
-				(char *) dispatch->filename.c_str(),
-				nullptr
-			};
-
-			run_local(command_line2, nullptr, nullptr);
-
 			// Synchronized write to the variable
 			dispatch->machine->numberSlots.fetch_add(1);
 

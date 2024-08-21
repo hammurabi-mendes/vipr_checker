@@ -34,6 +34,19 @@ inline void read_coefficients(Parser &parser, vector<Number> &coefficients) {
 	read_coefficients_with_size(parser, coefficients, number_coefficients);
 }
 
+inline void read_index_number_pairs_with_size(Parser &parser, vector<unsigned long> &indexes, vector<Number> &numbers, unsigned long size) {
+	for(unsigned long i = 0; i < size; i++) {
+		indexes.emplace_back(parser.get_unsigned_long());
+		numbers.emplace_back(parser.get_number());
+	}
+}
+
+inline void read_index_number_pairs(Parser &parser, vector<unsigned long> &indexes, vector<Number> &numbers) {
+	unsigned long size = parser.get_unsigned_long();
+
+	read_index_number_pairs_with_size(parser, indexes, numbers, size);
+}
+
 inline Constraint read_constraint(Parser &parser, unsigned long number_variables, vector<Number> &objective_coefficients) {
 	char *name = parser.get_stable_string(parser.get_token());
 	char *direction_string = parser.get_token();
@@ -57,32 +70,26 @@ inline Constraint read_constraint(Parser &parser, unsigned long number_variables
 
 	char *coefficient_specification = parser.get_token();
 
-	vector<Number> constraint_coefficients;
+	vector<unsigned long> constraint_indexes;
+	vector<Number> constraint_numbers;
 
 	if(strcmp(coefficient_specification, "OBJ") == 0) {
-		constraint_coefficients = objective_coefficients;
+		for(int i = 0; i < objective_coefficients.size(); i++) {
+			if(objective_coefficients[i].is_zero()) {
+				continue;
+			}
+
+			constraint_indexes.emplace_back(i);
+			constraint_numbers.emplace_back(objective_coefficients[i]);
+		}
 	}
 	else {
 		unsigned long number_coefficients = parser.parse_unsigned_long(coefficient_specification);
 
-		constraint_coefficients.resize(number_variables);
-		read_coefficients_with_size(parser, constraint_coefficients, number_coefficients);
+		read_index_number_pairs_with_size(parser, constraint_indexes, constraint_numbers, number_coefficients);
 	}
 
-	return Constraint(name, constraint_coefficients, direction, target);
-}
-
-inline void read_index_number_pairs_with_size(Parser &parser, vector<unsigned long> &indexes, vector<Number> &numbers, unsigned long size) {
-	for(unsigned long i = 0; i < size; i++) {
-		indexes.emplace_back(parser.get_unsigned_long());
-		numbers.emplace_back(parser.get_number());
-	}
-}
-
-inline void read_index_number_pairs(Parser &parser, vector<unsigned long> &indexes, vector<Number> &numbers) {
-	unsigned long size = parser.get_unsigned_long();
-
-	read_index_number_pairs_with_size(parser, indexes, numbers, size);
+	return Constraint(name, constraint_indexes, constraint_numbers, direction, target);
 }
 
 inline Reason read_reason(Parser &parser) {
@@ -319,7 +326,7 @@ int main(int argc, char **argv) {
     }
 
 	if(block_size == 0) {
-		block_size = std::max(1UL, certificate.number_derived_constraints / 192);
+		block_size = std::max(1UL, certificate.number_derived_constraints / (2 * 192));
 	}
 
 	auto end_parsing = std::chrono::high_resolution_clock::now();
@@ -344,7 +351,7 @@ int main(int argc, char **argv) {
 	double elapsed_generation = std::chrono::duration<double>(end_generation - begin_time).count();
 	double elapsed_total = std::chrono::duration<double>(end_total - begin_time).count();
 
-	fprintf(stderr, "Results: %s|%s|%ld|%.3lf|%.3lf|%.3lf|%.3lf\n", input_filename, (result_ok ? "OK" : "ERR"), block_size, elapsed_parsing, elapsed_precomputation, elapsed_generation, elapsed_total);
+	fprintf(stderr, "Results: %s|%s|%ld|%.3lf|%.3lf|%.3lf|%.3lf|%ld|%ld|%ld|%ld|%d|%d|%d\n", input_filename, (result_ok ? "OK" : "ERR"), block_size, elapsed_parsing, elapsed_precomputation, elapsed_generation, elapsed_total, certificate.number_variables, certificate.number_problem_constraints, certificate.number_derived_constraints, certificate.number_solutions, certificate.feasible ? 1 : 0, certificate.feasible_lower_bound.is_negative_infinity ? 1 : 0, certificate.feasible_upper_bound.is_positive_infinity ? 1 : 0);
 
 	return EXIT_SUCCESS;
 }

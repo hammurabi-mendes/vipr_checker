@@ -5,9 +5,13 @@
 #include <set>
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 
 #include <functional>
 #include <thread>
+
+#include <stdexcept>
+#include <format>
 
 #include "basic_types.h"
 
@@ -16,9 +20,16 @@
 using std::set;
 using std::vector;
 using std::unordered_set;
+using std::unordered_map;
 
 using std::function;
 using std::thread;
+
+using std::runtime_error;
+using std::format;
+
+// Global numeric zero
+extern Number zero;
 
 // Used in Certificate::print()
 string get_string_numbers(vector<Number> &coefficients);
@@ -31,17 +42,50 @@ enum Direction {
 
 struct Constraint {
 	char *name;
-	vector<Number> coefficients;
+	vector<unsigned long> coefficient_indexes;
+	vector<Number> coefficient_numbers;
 	Direction direction;
 	Number target;
 
-	Constraint(char *name, vector<Number> &coefficients, Direction direction, Number target):
-		name{name}, coefficients{coefficients}, direction{direction}, target{target} {}
+	unordered_map<unsigned long, unsigned long> coefficient_positions;
+
+	Constraint(char *name, vector<unsigned long> coefficient_indexes, vector<Number> &coefficient_numbers, Direction direction, Number target):
+		name{name}, coefficient_indexes{coefficient_indexes}, coefficient_numbers{coefficient_numbers}, direction{direction}, target{target} {
+
+		for(int i = 0; i < coefficient_indexes.size(); i++) {
+			coefficient_positions[coefficient_indexes[i]] = i;
+		}
+	}
 	
+	inline Number &coefficients_at(unsigned long i) {
+		auto iterator = coefficient_positions.find(i);
+
+		if(iterator != coefficient_positions.end()) {
+			return coefficient_numbers[iterator->second];
+		}
+
+		return zero;
+	}
+
 	string get_string() {
 		string result = string(name) + ": ";
 
-		result += get_string_numbers(coefficients);
+		bool first = true;
+
+		for(int i = 0; i < coefficient_indexes.size(); i++) {
+			if(first) {
+				first = false;
+			}
+			else {
+				result += " + ";
+			}
+
+			result += "(";
+			result += coefficient_numbers[i].get_string();
+			result += " x_";
+			result += std::to_string(coefficient_indexes[i]);
+			result += ")";
+		}
 
 		switch(direction) {
 			case Direction::SmallerEqual:
@@ -244,6 +288,7 @@ private:
 
 	// Begin SOL predicate
 	void print_respect_bound(vector<Number> &coefficients, vector<Number> &assignments, Direction direction, Number &target);
+	void print_respect_bound(Constraint &constraint, vector<Number> &assignments, Direction direction, Number &target);
 	void print_one_solution_within_bound(Direction direction, Number &bound);
 	void print_all_solutions_within_bound(Direction direction, Number &bound);
 
@@ -308,6 +353,10 @@ private:
 	// End DER predicate
 
 	inline Derivation &get_derivation_from_offset(unsigned long offset) {
+		if(offset >= number_total_constraints) {
+			throw runtime_error(format("Requesting non-existent derivation {}\n", offset));
+		}
+
 		return derivations[offset - number_problem_constraints];
 	}
 

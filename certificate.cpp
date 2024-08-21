@@ -2,15 +2,11 @@
 
 #include "file_helper.h"
 
-#include <stdexcept>
-#include <format>
-
 #include <cmath>
 
 using std::string;
 
-using std::runtime_error;
-using std::format;
+Number zero("0");
 
 //////////////////////////
 // Operator definitions //
@@ -364,8 +360,6 @@ void print_footer() {
 // Print model constraints //
 /////////////////////////////
 
-static Number zero("0");
-
 bool Certificate::get_PUB() {
 	return (feasible && !feasible_upper_bound.is_positive_infinity);
 }
@@ -408,6 +402,46 @@ void Certificate::print_respect_bound(vector<Number> &coefficients, vector<Numbe
 				for(unsigned long i = 0; i < number_variables; i++) {
 #ifndef FULL_MODEL
 					auto &coefficient = coefficients[i];
+					auto &assignment = assignments[i];
+
+					if(coefficient.is_zero() || assignment.is_zero()) {
+						continue;
+					}
+
+					MIN_COUNT;
+#endif /* !FULL_MODEL */
+
+					print_op2<OP_TIMES>(
+						LAMBDA(print_number(coefficient)),
+						LAMBDA(print_number(assignment))
+					);
+
+					// Space between multiplicative terms on the left-hand side
+					write_output(" ");
+				}
+
+#ifndef FULL_MODEL
+				MIN_ENSURE_ZERO;
+#endif /* !FULL_MODEL */
+			));
+		),
+		LAMBDA(print_number(target))
+	);
+}
+
+// TODO: This function is too similar to the one above. Consider creating one function that handles both
+void Certificate::print_respect_bound(Constraint &constraint, vector<Number> &assignments, Direction direction, Number &target) {
+	print_direction_op2(
+		direction,
+		LAMBDA(
+			print_op1<OP_PLUS>(LAMBDA(
+#ifndef FULL_MODEL
+				MIN_SET(2);
+#endif /* !FULL_MODEL */
+
+				for(unsigned long i = 0; i < number_variables; i++) {
+#ifndef FULL_MODEL
+					auto &coefficient = constraint.coefficients_at(i);
 					auto &assignment = assignments[i];
 
 					if(coefficient.is_zero() || assignment.is_zero()) {
@@ -489,7 +523,7 @@ void Certificate::print_feas_individual(Solution &solution) {
 					LITERAL(0)
 				)),
 				LAMBDA(
-					print_respect_bound(constraint.coefficients, solution.assignments, Direction::GreaterEqual, constraint.target);
+					print_respect_bound(constraint, solution.assignments, Direction::GreaterEqual, constraint.target);
 				)
 			);
 			MIN_COUNT;
@@ -500,7 +534,7 @@ void Certificate::print_feas_individual(Solution &solution) {
 					LITERAL(0)
 				)),
 				LAMBDA(
-					print_respect_bound(constraint.coefficients, solution.assignments, Direction::SmallerEqual, constraint.target);
+					print_respect_bound(constraint, solution.assignments, Direction::SmallerEqual, constraint.target);
 				)
 			);
 			MIN_COUNT;
@@ -594,11 +628,24 @@ bool Certificate::calculate_Aij(unsigned long i, unsigned long j) {
 }
 
 void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
+#ifndef AIJ_SMT
+	bool result = true;
+#endif /* AIJ_SMT */
+
 	for(unsigned long j = k + 1; j < number_total_constraints; j++) {
 		if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+#ifndef AIJ_SMT
+			result &= !calculate_Aij(k, j);
+#else
 			print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(k, j))));
+#endif /* AIJ_SMT */
 		}
 	}
+
+#ifndef AIJ_SMT
+	print_bool(result);
+	write_output(" ");
+#endif /* AIJ_SMT */
 
 	switch(derivation.reason.type) {
 		case ReasonType::TypeASM:
@@ -608,12 +655,26 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 					LAMBDA(
 						MIN_SET(2);
 
+#ifndef AIJ_SMT
+	  					bool result = true;
+#endif /* AIJ_SMT */
+
 						for(unsigned long j = number_problem_constraints; j < k; j++) {
 							if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+#ifndef AIJ_SMT
+								result &= (!calculate_Aij(k, j));
+#else
 								print_op1<OP_NOT>(LAMBDA(print_bool(calculate_Aij(k, j))));
 								MIN_COUNT;
+#endif /* AIJ_SMT */
 							}
 						}
+
+#ifndef AIJ_SMT
+						print_bool(result);
+						write_output(" ");
+						MIN_COUNT;
+#endif /* AIJ_SMT */
 
 						MIN_ENSURE_TRUE;
 					)
@@ -624,9 +685,27 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 		case ReasonType::TypeRND:
 			print_op1<OP_AND>(LAMBDA(
 				MIN_SET(2);
+#ifndef AIJ_SMT
+
+				bool result = true;
+#endif /* AIJ_SMT */
 
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
 					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+#ifndef AIJ_SMT
+						bool inner1 = calculate_Aij(k, j);
+						bool inner2 = false;
+
+						for(unsigned long &i: derivation.reason.constraint_indexes) {
+							if(j <= i && i < k) {
+								inner2 |= calculate_Aij(i, j);
+							}
+						}
+
+						result &= (inner1 == inner2);
+						continue;
+#endif /* AIJ_SMT */
+
 						print_op2<OP_EQ>(
 							LAMBDA(print_bool(calculate_Aij(k, j))),
 							LAMBDA(print_op1<OP_OR>(
@@ -651,6 +730,12 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 					}
 				}
 
+#ifndef AIJ_SMT
+				print_bool(result);
+				write_output(" ");
+				MIN_COUNT;
+#endif /* AIJ_SMT */
+
 				MIN_ENSURE_TRUE;
 			));
 			break;
@@ -658,8 +743,21 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 			print_op1<OP_AND>(LAMBDA(
 				MIN_SET(2);
 
+#ifndef AIJ_SMT
+				bool result = true;
+#endif /* AIJ_SMT */
+
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
 					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+#ifndef AIJ_SMT
+						bool inner1 = calculate_Aij(k, j);
+						bool inner1a = calculate_Aij(derivation.reason.get_i1(), j) && (j != derivation.reason.get_l1());
+						bool inner1b = calculate_Aij(derivation.reason.get_i2(), j) && (j != derivation.reason.get_l2());
+
+						result &= (inner1 == (inner1a || inner1b));
+						continue;
+#endif /* AIJ_SMT */
+
 						print_op2<OP_EQ>(
 							LAMBDA(print_bool(calculate_Aij(k, j))),
 							LAMBDA(print_op2<OP_OR>(
@@ -677,12 +775,33 @@ void Certificate::print_ASM(unsigned long k, Derivation &derivation) {
 					}
 				}
 
+#ifndef AIJ_SMT
+				print_bool(result);
+				write_output(" ");
+				MIN_COUNT;
+#endif /* AIJ_SMT */
+
 				MIN_ENSURE_TRUE;
 			));
 			break;
 		case ReasonType::TypeSOL:
 			print_op1<OP_AND>(LAMBDA(
 				MIN_SET(2);
+
+#ifndef AIJ_SMT
+				bool result = true;
+
+				for(unsigned long j = number_problem_constraints; j < k; j++) {
+					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
+						result &= !calculate_Aij(k, j);
+					}
+				}
+
+				print_bool(result);
+				write_output(" ");
+				MIN_COUNT;
+				return;
+#endif /* AIJ_SMT */
 
 				for(unsigned long j = number_problem_constraints; j < k; j++) {
 					if(get_derivation_from_offset(j).reason.type == ReasonType::TypeASM) {
@@ -704,7 +823,14 @@ void Certificate::print_PRV(unsigned long k, Derivation &derivation) {
 		MIN_SET(2);
 
 		for(unsigned long &j: derivation.reason.constraint_indexes) {
-			print_op2<OP_L>(j, k);
+			print_op2<OP_AND>(
+				LAMBDA(
+					print_op2<OP_L>(j, k)
+				),
+				LAMBDA(
+					print_op2<OP_GEQ>(j, LITERAL(0))
+				)
+			);
 			MIN_COUNT;
 		}
 
@@ -820,7 +946,7 @@ void Certificate::print_DOM(P0 &&print_coefficientA, P1 &&print_directionA, P2 &
 void Certificate::print_DOM(Constraint &constraint1, Constraint &constraint2) {
 	print_DOM(
 		[&] (unsigned long j) {
-			print_number(constraint1.coefficients[j]);
+			print_number(constraint1.coefficients_at(j));
 		},
 		LAMBDA(print_number(constraint1.target)),
 		LAMBDA(print_op2<OP_EQ>(
@@ -836,7 +962,7 @@ void Certificate::print_DOM(Constraint &constraint1, Constraint &constraint2) {
 			LITERAL(0)
 		)),
 		[&] (unsigned long j) {
-			print_number(constraint2.coefficients[j]);
+			print_number(constraint2.coefficients_at(j));
 		},
 		LAMBDA(print_number(constraint2.target)),
 		LAMBDA(print_op2<OP_EQ>(
@@ -884,15 +1010,15 @@ void Certificate::print_DIS(Constraint &c_i, Constraint &c_j) {
 			// Not counting because the number of operations is always >= 2
 
 			for(unsigned long k = 0; k < number_variables; k++) {
-				print_op2<OP_EQ>(c_i.coefficients[k], c_j.coefficients[k]);
+				print_op2<OP_EQ>(c_i.coefficients_at(k), c_j.coefficients_at(k));
 			}
 			 
 			for(unsigned long k: variable_integral_vector) {
-				print_op1<OP_INTEGRAL>(c_i.coefficients[k]);
+				print_op1<OP_INTEGRAL>(c_i.coefficients_at(k));
 			}
 
 			for(unsigned long k: variable_non_integral_vector) {
-				print_op2<OP_EQ>(c_i.coefficients[k], LITERAL(0));
+				print_op2<OP_EQ>(c_i.coefficients_at(k), LITERAL(0));
 			}
 			
 			print_op1<OP_INTEGRAL>(c_i.target);
@@ -952,14 +1078,14 @@ void Certificate::print_LIN_RND_aj(unsigned long derivation_index, Derivation &d
 			Number &data_i = derivation.reason.constraint_multipliers[data_position];
 
 #ifndef FULL_MODEL
-			if(data_i.is_zero() || constraints[i].coefficients[j].is_zero()) {
+			if(data_i.is_zero() || constraints[i].coefficients_at(j).is_zero()) {
 				continue;
 			}
 #endif /* FULL_MODEL */
 
 			print_op2<OP_TIMES>(
 				data_i,
-				LAMBDA(print_number(constraints[i].coefficients[j]))
+				LAMBDA(print_number(constraints[i].coefficients_at(j)))
 			);
 			MIN_COUNT;
 		}
@@ -969,7 +1095,7 @@ void Certificate::print_LIN_RND_aj(unsigned long derivation_index, Derivation &d
 }
 
 void Certificate::print_LIN_RND_aPj(unsigned long derivation_index, Derivation &derivation, unsigned long j) {
-	print_number(constraints[derivation_index].coefficients[j]);
+	print_number(constraints[derivation_index].coefficients_at(j));
 }
 
 void Certificate::print_LIN_RND_b(unsigned long derivation_index, Derivation &derivation) {
@@ -1039,14 +1165,89 @@ void Certificate::print_conjunction_eq_leq_geq(unsigned long derivation_index, D
 }
 
 void Certificate::print_eq(unsigned long derivation_index, Derivation &derivation) {
+#ifndef EQ_LEQ_GEG_SMT
+	vector<unsigned long> &data = derivation.reason.constraint_indexes;
+
+	bool result = true;
+
+	for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
+		// Using the same indexes as the definitions
+		unsigned long i = derivation.reason.constraint_indexes[data_position];
+		Number &data_i = derivation.reason.constraint_multipliers[data_position];
+
+		if(!data_i.is_zero() && constraints[i].direction != Direction::Equal) {
+			result = false;
+			break;
+		}
+	}
+
+	print_bool(result);
+	write_output(" ");
+	return;
+#endif /* !EQ_LEQ_GEG_SMT */
+
 	print_conjunction_eq_leq_geq(derivation_index, derivation, Direction::Equal);
 }
 
 void Certificate::print_geq(unsigned long derivation_index, Derivation &derivation) {
+#ifndef EQ_LEQ_GEG_SMT
+	vector<unsigned long> &data = derivation.reason.constraint_indexes;
+
+	bool result = true;
+
+	for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
+		// Using the same indexes as the definitions
+		unsigned long i = derivation.reason.constraint_indexes[data_position];
+		Number &data_i = derivation.reason.constraint_multipliers[data_position];
+
+		if(!data_i.is_zero() && constraints[i].direction != Direction::Equal) {
+			if(data_i.numerator[0] == '-' && constraints[i].direction == Direction::GreaterEqual) {
+				result = false;
+				break;
+			}
+			if(data_i.numerator[0] != '-' && constraints[i].direction == Direction::SmallerEqual) {
+				result = false;
+				break;
+			}
+		}
+	}
+
+	print_bool(result);
+	write_output(" ");
+	return;
+#endif /* !EQ_LEQ_GEG_SMT */
+
 	print_conjunction_eq_leq_geq(derivation_index, derivation, Direction::GreaterEqual);
 }
 
 void Certificate::print_leq(unsigned long derivation_index, Derivation &derivation) {
+#ifndef EQ_LEQ_GEG_SMT
+	vector<unsigned long> &data = derivation.reason.constraint_indexes;
+
+	bool result = true;
+
+	for(unsigned long data_position = 0; data_position < data.size(); data_position++) {
+		// Using the same indexes as the definitions
+		unsigned long i = derivation.reason.constraint_indexes[data_position];
+		Number &data_i = derivation.reason.constraint_multipliers[data_position];
+
+		if(!data_i.is_zero() && constraints[i].direction != Direction::Equal) {
+			if(data_i.numerator[0] == '-' && constraints[i].direction == Direction::SmallerEqual) {
+				result = false;
+				break;
+			}
+			if(data_i.numerator[0] != '-' && constraints[i].direction == Direction::GreaterEqual) {
+				result = false;
+				break;
+			}
+		}
+	}
+
+	print_bool(result);
+	write_output(" ");
+	return;
+#endif /* !EQ_LEQ_GEG_SMT */
+
 	print_conjunction_eq_leq_geq(derivation_index, derivation, Direction::SmallerEqual);
 }
 
@@ -1250,7 +1451,7 @@ void Certificate::print_sol_individual_dom(Solution &solution, Direction directi
 			LITERAL(0)
 		)),
 		[&] (unsigned long j) {
-			print_number(constraint2.coefficients[j]);
+			print_number(constraint2.coefficients_at(j));
 		},
 		LAMBDA(print_number(constraint2.target)),
 		LAMBDA(print_op2<OP_EQ>(
@@ -1354,7 +1555,6 @@ void Certificate::print_der() {
 #ifdef PARALLEL
 	unsigned long number_blocks = std::ceil(static_cast<float>(number_derived_constraints) / block_size);
 
-	// Need to mulitply by two to account for hyperthreading
 	unsigned long total_cores = std::min(2 * static_cast<unsigned long>(std::thread::hardware_concurrency()), number_blocks);
 
 	fprintf(stderr, "Running DER generation with %lu parallel cores and block size %lu\n", total_cores, block_size);
@@ -1404,7 +1604,7 @@ void Certificate::print_der() {
 				LAMBDA(print_op2<OP_AND>(
 					LAMBDA(print_DOM(
 						[&] (unsigned long j) {
-							print_number(last_constraint.coefficients[j]);
+							print_number(last_constraint.coefficients_at(j));
 						},
 						LAMBDA(print_s(last_constraint.direction)),
 						LAMBDA(print_number(last_constraint.target)),
@@ -1431,7 +1631,7 @@ void Certificate::print_der() {
 						LAMBDA(print_op2<OP_AND>(
 							LAMBDA(print_DOM(
 								[&] (unsigned long j) {
-									print_number(last_constraint.coefficients[j]);
+									print_number(last_constraint.coefficients_at(j));
 								},
 								LAMBDA(print_s(last_constraint.direction)),
 								LAMBDA(print_number(last_constraint.target)),
@@ -1460,7 +1660,7 @@ void Certificate::print_der() {
 						LAMBDA(print_op2<OP_AND>(
 							LAMBDA(print_DOM(
 								[&] (unsigned long j) {
-									print_number(last_constraint.coefficients[j]);
+									print_number(last_constraint.coefficients_at(j));
 								},
 								LAMBDA(print_s(last_constraint.direction)),
 								LAMBDA(print_number(last_constraint.target)),

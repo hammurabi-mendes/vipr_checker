@@ -5,8 +5,6 @@
 
 using std::string;
 
-// TODO: Change constructors/destructors after I understand the permanence requirements
-//       Also, create a linear allocator for strings
 struct Number {
 	char *numerator;
 	char *denominator;
