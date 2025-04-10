@@ -195,8 +195,12 @@ int main(int argc, char **argv) {
 	char *line;
 	char *token;
 
-    while((line = parser.get_line()) != nullptr) {
+	while((line = parser.get_line()) != nullptr) {
 		token = parser.get_token();
+
+		if(!token) {
+			continue;
+		}
 
 		// Comment lines: Ignore
 		if(strcmp(token, "%") == 0) {
