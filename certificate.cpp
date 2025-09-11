@@ -143,6 +143,16 @@ void Certificate::calculate_dependencies() {
 				// break;
 		}
 	}
+
+	for(unsigned long i = number_problem_constraints; i < number_total_constraints; i++) {
+		for(auto &index_dependency : *dependencies[i]) {
+			Derivation &derivation_dependency = get_derivation_from_offset(index_dependency);
+
+			if(derivation_dependency.reason.type != ReasonType::TypeASM) {
+				throw runtime_error(format("Constraint {} depends on non-ASM constraint {}\n", i, index_dependency));
+			}
+		}
+	}
 }
 
 //////////////////////////////
@@ -1321,25 +1331,36 @@ void Certificate::print_rnd_individual_part2(PQ &&a, P0 &&b, P1 &&eq, P2 &&geq, 
 						LAMBDA(
 							print_op2<OP_EQ>(
 								LAMBDA(print_s(constraints[derivation_index].direction)),
-								LITERAL(1)
+								LITERAL(0)
 							)
 						),
+						LAMBDA(print_bool(false)),
 						LAMBDA(
-							print_op2<OP_AND>(
-								geq,
-								LAMBDA(print_op2<OP_GEQ>(
-									LAMBDA(print_ceil(b)),
-									bP
-								))
-							)
-						),
-						LAMBDA(
-							print_op2<OP_AND>(
-								leq,
-								LAMBDA(print_op2<OP_LEQ>(
-									LAMBDA(print_op1<OP_RND_DOWN>(b)),
-									bP
-								))
+							print_ifelse(
+								LAMBDA(
+									print_op2<OP_EQ>(
+										LAMBDA(print_s(constraints[derivation_index].direction)),
+										LITERAL(1)
+									)
+								),
+								LAMBDA(
+									print_op2<OP_AND>(
+										geq,
+										LAMBDA(print_op2<OP_GEQ>(
+											LAMBDA(print_ceil(b)),
+											bP
+										))
+									)
+								),
+								LAMBDA(
+									print_op2<OP_AND>(
+										leq,
+										LAMBDA(print_op2<OP_LEQ>(
+											LAMBDA(print_op1<OP_RND_DOWN>(b)),
+											bP
+										))
+									)
+								)
 							)
 						)
 					)
@@ -1362,11 +1383,6 @@ void Certificate::print_rnd_individual(unsigned long derivation_index, Derivatio
 			},
 			LAMBDA(print_LIN_RND_b(derivation_index, derivation)),
 			LAMBDA(print_eq(derivation_index, derivation))
-		);
-
-		print_op2<OP_NEQ>(
-			LAMBDA(print_s(constraints[derivation_index].direction)),
-			LITERAL(0)
 		);
 
 		print_rnd_individual_part2(
