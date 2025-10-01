@@ -1,6 +1,6 @@
 # VIPR certificate checking using Satistiability Modulo Theories
 
-# Before compiling:
+# Parallel Configuration:
 
 To adjust the files to your environment, modify `local_runner.sh` to update your working directory and the path to the SMT checker (we tested with [`cvc5`](https://github.com/cvc5/cvc5)).
 ```
@@ -26,14 +26,18 @@ In addition, still in ``remote_execution_manager.cpp``, change ``localhost`` wit
 
 If you are not running under Linux, please remove the ``-DLINUX`` flag in the ``Makefile``.
 
-# After making changes, compile like this:
+# Building
+
+First, make sure that your compiler fully supports C++20. Using ``clang++`` version 20+ or ``g++`` version 13+ is required. If you want to use ``g++``, change the first line of the ``Makefile`` appropriately. All of our tests were run using ``clang++''.
 
 ```
 make clean;
 make
 ```
 
-# After compiling, run like this:
+# Running
+
+Do **not** run the ``vipr_checker`` file directly; instead use one of our scripts such as ``run_one.sh``, which accepts a VIPR file and the block size used for the parallel DER generation.
 
 ```
 ./run_one.sh dano3_3.vipr 50
