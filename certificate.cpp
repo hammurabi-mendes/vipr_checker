@@ -608,7 +608,7 @@ void Certificate::print_sol() {
 	};
 
 #ifdef PARALLEL
-	threads.emplace_back([&, this] {
+	threads.emplace_back([=, this] {
 		// Open the file for SOL and print header
 		string section_output_filename = output_filename + ".SOL";
 
@@ -1576,7 +1576,7 @@ void Certificate::print_der() {
 	fprintf(stderr, "Running DER generation with %lu parallel cores and block size %lu\n", total_cores, block_size);
 
 	for(unsigned long core = 0; core < total_cores; core++) {
-		threads.emplace_back([&, this] (unsigned long core) {
+		threads.emplace_back([=, this] (unsigned long core) {
 			for(unsigned long derived_index = (core * block_size); derived_index < number_derived_constraints; derived_index += (total_cores * block_size)) {
 				// Calculate global indexes
 				unsigned long global_index_start = derived_index + number_problem_constraints;
@@ -1701,7 +1701,7 @@ void Certificate::print_der() {
 	};
 
 #ifdef PARALLEL
-	threads.emplace_back([&, this] {
+	threads.emplace_back([=, this] {
 		// Open the file for SOL and print header
 		string section_output_filename = output_filename + ".DER-solcheck";
 		
